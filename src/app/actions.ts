@@ -80,6 +80,22 @@ export async function savePerson(person: Person): Promise<ActionResult> {
   return { ok: true, persisted: true };
 }
 
+export async function deleteGroup(id: string): Promise<ActionResult> {
+  const { supabase } = await requireLeader();
+  if (!supabase) return { ok: true, persisted: false };
+  const { error } = await supabase.from("groups").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message, persisted: true };
+  return { ok: true, persisted: true };
+}
+
+export async function deletePerson(id: string): Promise<ActionResult> {
+  const { supabase } = await requireLeader();
+  if (!supabase) return { ok: true, persisted: false };
+  const { error } = await supabase.from("people").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message, persisted: true };
+  return { ok: true, persisted: true };
+}
+
 export async function signOut() {
   const supabase = await getServerSupabase();
   if (supabase) await supabase.auth.signOut();

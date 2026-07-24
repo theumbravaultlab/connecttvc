@@ -149,6 +149,7 @@ export function GroupForm({
         </Field>
         <Field full label="Contact email">
           <TextInput
+            type="email"
             value={group.contactEmail}
             onChange={(e) => onPatch({ contactEmail: e.target.value })}
           />
@@ -176,6 +177,7 @@ export function GroupForm({
         <Field label="Max capacity">
           <TextInput
             type="number"
+            min={1}
             value={group.capacity}
             onChange={(e) => onPatch({ capacity: Number(e.target.value) || 0 })}
           />
@@ -183,6 +185,7 @@ export function GroupForm({
         <Field label="Current members">
           <TextInput
             type="number"
+            min={0}
             value={group.members}
             onChange={(e) => onPatch({ members: Number(e.target.value) || 0 })}
           />

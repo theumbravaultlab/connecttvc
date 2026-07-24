@@ -64,6 +64,12 @@ function rowToPerson(r: any): Person {
 // not configured yet, so the app is viewable out of the box.
 // ============================================================
 
+// When Supabase isn't configured at all, seed data is the *expected*
+// experience (demo mode). Once it IS configured, a failed query is a real
+// problem (expired session, RLS misconfig, network) — never silently swap
+// in fake seed data at that point, since a coordinator could mistake it for
+// their real church's data. Let it throw; app/error.tsx shows a clear message.
+
 export async function getGroups(): Promise<Group[]> {
   const supabase = await getServerSupabase();
   if (!supabase) return SEED_GROUPS;
@@ -71,8 +77,8 @@ export async function getGroups(): Promise<Group[]> {
     .from("groups")
     .select("*")
     .order("name");
-  if (error || !data) return SEED_GROUPS;
-  return data.map(rowToGroup);
+  if (error) throw new Error(`Couldn't load groups: ${error.message}`);
+  return (data ?? []).map(rowToGroup);
 }
 
 export async function getPeople(): Promise<Person[]> {
@@ -82,6 +88,6 @@ export async function getPeople(): Promise<Person[]> {
     .from("people")
     .select("*")
     .order("name");
-  if (error || !data) return SEED_PEOPLE;
-  return data.map(rowToPerson);
+  if (error) throw new Error(`Couldn't load people: ${error.message}`);
+  return (data ?? []).map(rowToPerson);
 }

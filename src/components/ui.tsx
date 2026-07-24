@@ -134,6 +134,7 @@ export function DayPills({
           <button
             key={d}
             type="button"
+            aria-pressed={active}
             onClick={() => onToggle(d)}
             className="rounded-full border px-2.5 py-1 text-[11.5px] font-bold transition-all duration-100"
             style={
@@ -153,12 +154,17 @@ export function DayPills({
 export function FieldLabel({
   children,
   tag,
+  htmlFor,
 }: {
   children: ReactNode;
   tag?: string;
+  htmlFor?: string;
 }) {
   return (
-    <label className="mb-1 flex items-center gap-1.5 text-[11.5px] font-bold text-[#8aa0b4]">
+    <label
+      htmlFor={htmlFor}
+      className="mb-1 flex items-center gap-1.5 text-[11.5px] font-bold text-[#8aa0b4]"
+    >
       {children}
       {tag && (
         <span

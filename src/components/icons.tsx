@@ -58,6 +58,12 @@ export const XIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const TrashIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" />
+  </svg>
+);
+
 export const ChevronLeftIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M15 6l-6 6 6 6" />

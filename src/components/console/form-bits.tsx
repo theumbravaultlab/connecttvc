@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ReactNode } from "react";
 import { FieldLabel } from "@/components/ui";
 
 export function SectionHeading({ children }: { children: ReactNode }) {
@@ -21,10 +21,17 @@ export function Field({
   full?: boolean;
   children: ReactNode;
 }) {
+  const id = useId();
+  const control = isValidElement<{ id?: string }>(children)
+    ? cloneElement(children, { id })
+    : children;
+
   return (
     <div className={`flex-grow ${full ? "w-full" : "w-full sm:w-[48%]"}`}>
-      <FieldLabel tag={tag}>{label}</FieldLabel>
-      {children}
+      <FieldLabel tag={tag} htmlFor={id}>
+        {label}
+      </FieldLabel>
+      {control}
     </div>
   );
 }

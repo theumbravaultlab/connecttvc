@@ -66,12 +66,14 @@ export function PersonForm({
         </Field>
         <Field label="Email">
           <TextInput
+            type="email"
             value={person.email}
             onChange={(e) => onPatch({ email: e.target.value })}
           />
         </Field>
         <Field label="Phone">
           <TextInput
+            type="tel"
             value={person.phone}
             onChange={(e) => onPatch({ phone: e.target.value })}
           />
@@ -180,6 +182,12 @@ export function PersonForm({
             ))}
           </SelectInput>
         </Field>
+        {person.status === "Matched" && person.group && (
+          <div className="w-full rounded-xl bg-[#fdf9ef] px-3 py-2.5 text-[12px] font-semibold text-[#a9812f]">
+            Tip: "Current members" on {groupName} is tracked separately — if
+            this is a new permanent placement, update it on the Groups tab too.
+          </div>
+        )}
         <Field full label="Leader notes">
           <TextArea
             value={person.notes}

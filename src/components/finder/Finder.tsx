@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AREAS,
   DAY_LONG,
@@ -32,6 +32,9 @@ export function Finder({
   const [personId, setPersonId] = useState<string>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
+  const findingForId = useId();
+  const areaId = useId();
+  const lifeId = useId();
 
   const person = people.find((p) => p.id === personId) ?? null;
 
@@ -111,10 +114,14 @@ export function Finder({
           <div className="shrink-0 border-b border-[#eef3f8] px-[15px] py-3.5">
             {people.length > 0 && (
               <div className="mb-3">
-                <label className="mb-1 block text-[11.5px] font-extrabold uppercase tracking-wide text-[#8aa0b4]">
+                <label
+                  htmlFor={findingForId}
+                  className="mb-1 block text-[11.5px] font-extrabold uppercase tracking-wide text-[#8aa0b4]"
+                >
                   Finding for
                 </label>
                 <select
+                  id={findingForId}
                   value={personId}
                   onChange={(e) => {
                     setPersonId(e.target.value);
@@ -176,6 +183,7 @@ export function Finder({
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     placeholder="Search groups or areas…"
+                    aria-label="Search groups or areas"
                     className="w-full rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] py-2 pl-9 pr-3 text-[12.5px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"
                   />
                 </div>
@@ -199,7 +207,11 @@ export function Finder({
                   })}
                 </div>
                 <div className="flex gap-2">
+                  <label htmlFor={areaId} className="sr-only">
+                    Filter by area
+                  </label>
                   <select
+                    id={areaId}
                     value={area}
                     onChange={(e) => setArea(e.target.value)}
                     className="w-1/2 rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-2.5 py-2 text-[12px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"
@@ -209,7 +221,11 @@ export function Finder({
                       <option key={a}>{a}</option>
                     ))}
                   </select>
+                  <label htmlFor={lifeId} className="sr-only">
+                    Filter by life stage
+                  </label>
                   <select
+                    id={lifeId}
                     value={life}
                     onChange={(e) => setLife(e.target.value)}
                     className="w-1/2 rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-2.5 py-2 text-[12px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"

@@ -12,8 +12,8 @@ import { Console } from "@/components/console/Console";
 type View = "map" | "console";
 
 export function AppShell({
-  groups,
-  people,
+  groups: initialGroups,
+  people: initialPeople,
   userEmail,
   persisted,
 }: {
@@ -23,6 +23,10 @@ export function AppShell({
   persisted: boolean;
 }) {
   const [view, setView] = useState<View>("map");
+  // Lifted above Finder/Console so a Console edit (or delete) is immediately
+  // visible on the Map tab too, instead of each tab holding its own copy.
+  const [groups, setGroups] = useState(initialGroups);
+  const [people, setPeople] = useState(initialPeople);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white">
@@ -83,8 +87,10 @@ export function AppShell({
         className={`min-h-0 flex-1 flex-col ${view === "console" ? "flex" : "hidden"}`}
       >
         <Console
-          initialGroups={groups}
-          initialPeople={people}
+          groups={groups}
+          setGroups={setGroups}
+          people={people}
+          setPeople={setPeople}
           persisted={persisted}
         />
       </div>

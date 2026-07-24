@@ -1,19 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition, useState, type Dispatch, type SetStateAction } from "react";
 import type { Group, Person } from "@/lib/types";
 import { initialsOf } from "@/lib/types";
-import { saveGroup, savePerson } from "@/app/actions";
+import { deleteGroup, deletePerson, saveGroup, savePerson } from "@/app/actions";
 import {
   Avatar,
   CapacityBar,
   StatusPill,
 } from "@/components/ui";
-import { ChevronLeftIcon, PlusIcon } from "@/components/icons";
+import { ChevronLeftIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { GroupForm } from "./GroupForm";
 import { PersonForm } from "./PersonForm";
 
 type Tab = "groups" | "people";
+type SaveState = "idle" | "saved" | "error";
 
 const blankGroup = (id: string): Group => ({
   id, name: "New Home Group", day: "Tue", time: "7:00 PM", area: "Eastside",
@@ -28,35 +29,57 @@ const blankPerson = (id: string): Person => ({
   accessibility: "—", status: "Unassigned", group: null, joined: "", notes: "",
 });
 
+function validateGroup(g: Group): string | null {
+  if (!g.name.trim()) return "Group name can't be blank.";
+  if (g.capacity < 1) return "Max capacity must be at least 1.";
+  return null;
+}
+
+function validatePerson(p: Person): string | null {
+  if (!p.name.trim()) return "Full name can't be blank.";
+  return null;
+}
+
 export function Console({
-  initialGroups,
-  initialPeople,
+  groups,
+  setGroups,
+  people,
+  setPeople,
   persisted,
 }: {
-  initialGroups: Group[];
-  initialPeople: Person[];
+  groups: Group[];
+  setGroups: Dispatch<SetStateAction<Group[]>>;
+  people: Person[];
+  setPeople: Dispatch<SetStateAction<Person[]>>;
   persisted: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("groups");
-  const [groups, setGroups] = useState(initialGroups);
-  const [people, setPeople] = useState(initialPeople);
-  const [selGroupId, setSelGroupId] = useState(initialGroups[0]?.id ?? null);
-  const [selPersonId, setSelPersonId] = useState(initialPeople[0]?.id ?? null);
-  const [saved, setSaved] = useState(false);
+  const [selGroupId, setSelGroupId] = useState(groups[0]?.id ?? null);
+  const [selPersonId, setSelPersonId] = useState(people[0]?.id ?? null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [mobileSub, setMobileSub] = useState<"list" | "edit">("list");
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
+
+  const clearFeedback = () => {
+    setSaveState("idle");
+    setSaveError(null);
+  };
 
   const changeTab = (t: Tab) => {
     setTab(t);
     setMobileSub("list");
+    clearFeedback();
   };
   const selectGroup = (id: string) => {
     setSelGroupId(id);
     setMobileSub("edit");
+    clearFeedback();
   };
   const selectPerson = (id: string) => {
     setSelPersonId(id);
     setMobileSub("edit");
+    clearFeedback();
   };
 
   const selGroup = groups.find((g) => g.id === selGroupId) ?? null;
@@ -77,6 +100,7 @@ export function Console({
     setSelGroupId(g.id);
     setTab("groups");
     setMobileSub("edit");
+    clearFeedback();
   };
   const addPerson = () => {
     const p = blankPerson(`new-${Date.now()}`);
@@ -84,20 +108,84 @@ export function Console({
     setSelPersonId(p.id);
     setTab("people");
     setMobileSub("edit");
-  };
-
-  const flashSaved = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    clearFeedback();
   };
 
   const handleSave = () => {
-    flashSaved();
-    startTransition(async () => {
-      if (tab === "groups" && selGroup) await saveGroup(selGroup);
-      if (tab === "people" && selPerson) await savePerson(selPerson);
-    });
+    if (tab === "groups" && selGroup) {
+      const err = validateGroup(selGroup);
+      if (err) {
+        setSaveState("error");
+        setSaveError(err);
+        return;
+      }
+      startTransition(async () => {
+        const result = await saveGroup(selGroup);
+        if (result.ok) {
+          setSaveState("saved");
+          setSaveError(null);
+          setTimeout(() => setSaveState("idle"), 1500);
+        } else {
+          setSaveState("error");
+          setSaveError(result.error ?? "Save failed — try again.");
+        }
+      });
+    } else if (tab === "people" && selPerson) {
+      const err = validatePerson(selPerson);
+      if (err) {
+        setSaveState("error");
+        setSaveError(err);
+        return;
+      }
+      startTransition(async () => {
+        const result = await savePerson(selPerson);
+        if (result.ok) {
+          setSaveState("saved");
+          setSaveError(null);
+          setTimeout(() => setSaveState("idle"), 1500);
+        } else {
+          setSaveState("error");
+          setSaveError(result.error ?? "Save failed — try again.");
+        }
+      });
+    }
   };
+
+  const handleDelete = () => {
+    if (tab === "groups" && selGroup) {
+      if (!window.confirm(`Delete "${selGroup.name}"? This can't be undone.`)) return;
+      startTransition(async () => {
+        const result = await deleteGroup(selGroup.id);
+        if (!result.ok) {
+          setSaveState("error");
+          setSaveError(result.error ?? "Delete failed — try again.");
+          return;
+        }
+        const remaining = groups.filter((g) => g.id !== selGroup.id);
+        setGroups(remaining);
+        setSelGroupId(remaining[0]?.id ?? null);
+        setMobileSub("list");
+        clearFeedback();
+      });
+    } else if (tab === "people" && selPerson) {
+      if (!window.confirm(`Delete "${selPerson.name}"? This can't be undone.`)) return;
+      startTransition(async () => {
+        const result = await deletePerson(selPerson.id);
+        if (!result.ok) {
+          setSaveState("error");
+          setSaveError(result.error ?? "Delete failed — try again.");
+          return;
+        }
+        const remaining = people.filter((p) => p.id !== selPerson.id);
+        setPeople(remaining);
+        setSelPersonId(remaining[0]?.id ?? null);
+        setMobileSub("list");
+        clearFeedback();
+      });
+    }
+  };
+
+  const selected = tab === "groups" ? selGroup : selPerson;
 
   return (
     <>
@@ -181,31 +269,71 @@ export function Console({
             <ChevronLeftIcon width={16} height={16} />
             Back to {tab === "groups" ? "groups" : "people"}
           </button>
-          <div className="hw-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-            {tab === "groups" && selGroup && (
-              <GroupForm group={selGroup} onPatch={patchGroup} />
-            )}
-            {tab === "people" && selPerson && (
-              <PersonForm
-                person={selPerson}
-                groups={groups}
-                onPatch={patchPerson}
-              />
-            )}
-          </div>
-          {/* save bar */}
-          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[#eef3f8] px-4 py-3 sm:px-6">
-            <span className="hidden text-[11.5px] font-semibold text-[#8aa0b4] sm:inline">
-              Edits apply to the live list instantly.
-            </span>
-            <button
-              onClick={handleSave}
-              className="ml-auto rounded-full px-5 py-2 text-[12.5px] font-bold text-white transition-colors"
-              style={{ background: saved ? "oklch(0.6 0.13 150)" : "#088df9" }}
-            >
-              {saved ? "✓ Saved" : "Save changes"}
-            </button>
-          </div>
+
+          {!selected ? (
+            <div className="flex flex-1 items-center justify-center p-6 text-center text-[13px] font-semibold text-[#8aa0b4]">
+              No {tab === "groups" ? "groups" : "people"} yet — click "
+              {tab === "groups" ? "New group" : "New person"}" to add one.
+            </div>
+          ) : (
+            <>
+              <div className="hw-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+                {tab === "groups" && selGroup && (
+                  <GroupForm group={selGroup} onPatch={patchGroup} />
+                )}
+                {tab === "people" && selPerson && (
+                  <PersonForm
+                    person={selPerson}
+                    groups={groups}
+                    onPatch={patchPerson}
+                  />
+                )}
+              </div>
+              {/* save bar */}
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[#eef3f8] px-4 py-3 sm:px-6">
+                <button
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 rounded-full px-3 py-2 text-[12.5px] font-bold text-[oklch(0.55_0.18_20)] transition-colors hover:bg-[oklch(0.97_0.03_20)] disabled:opacity-50"
+                >
+                  <TrashIcon width={15} height={15} />
+                  Delete
+                </button>
+                <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+                  {saveState === "error" ? (
+                    <span className="min-w-0 truncate text-[11.5px] font-bold text-[oklch(0.55_0.18_20)]">
+                      {saveError}
+                    </span>
+                  ) : (
+                    <span className="hidden text-[11.5px] font-semibold text-[#8aa0b4] sm:inline">
+                      Edits apply to the live list instantly.
+                    </span>
+                  )}
+                  <button
+                    onClick={handleSave}
+                    disabled={isPending}
+                    className="shrink-0 rounded-full px-5 py-2 text-[12.5px] font-bold text-white transition-colors disabled:opacity-70"
+                    style={{
+                      background:
+                        saveState === "error"
+                          ? "oklch(0.55 0.18 20)"
+                          : saveState === "saved"
+                            ? "oklch(0.6 0.13 150)"
+                            : "#088df9",
+                    }}
+                  >
+                    {isPending
+                      ? "Saving…"
+                      : saveState === "saved"
+                        ? "✓ Saved"
+                        : saveState === "error"
+                          ? "Retry save"
+                          : "Save changes"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>
