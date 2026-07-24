@@ -11,6 +11,7 @@ import {
   Toggle,
 } from "@/components/ui";
 import { spotsBadge } from "@/lib/colors";
+import { AddressAutocomplete } from "./AddressAutocomplete";
 import { SectionHeading, Field } from "./form-bits";
 
 export function GroupForm({
@@ -125,10 +126,10 @@ export function GroupForm({
           />
         </Field>
         <Field full label="Home address" tag="Members only">
-          <TextInput
+          <AddressAutocomplete
             value={group.address}
-            onChange={(e) => onPatch({ address: e.target.value })}
-            placeholder="412 Elm Ct, Eastside"
+            onChange={(address) => onPatch({ address })}
+            placeholder="Start typing an address…"
           />
         </Field>
       </div>

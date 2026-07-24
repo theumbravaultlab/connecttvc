@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { APIProvider, AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
+import { AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
 import type { Group } from "@/lib/types";
 import { lifeColors } from "@/lib/colors";
 
@@ -21,6 +21,9 @@ function hasLocation(g: Group): g is LocatedGroup {
   return typeof g.lat === "number" && typeof g.lng === "number";
 }
 
+// Note: no <APIProvider> here — it's mounted once at the AppShell level so
+// both this map and the Console's address autocomplete share one loaded
+// Maps JS instance instead of loading the script twice.
 export function FinderMap({
   groups,
   selectedId,
@@ -39,22 +42,6 @@ export function FinderMap({
     );
   }
 
-  return (
-    <APIProvider apiKey={BROWSER_KEY}>
-      <MapInner groups={groups} selectedId={selectedId} onSelect={onSelect} />
-    </APIProvider>
-  );
-}
-
-function MapInner({
-  groups,
-  selectedId,
-  onSelect,
-}: {
-  groups: Group[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}) {
   const located = groups.filter(hasLocation);
   const missing = groups.length - located.length;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { APIProvider } from "@vis.gl/react-google-maps";
 import type { Group, Person } from "@/lib/types";
 import { initialsOf } from "@/lib/types";
 import { signOut } from "@/app/actions";
@@ -10,6 +11,11 @@ import { Finder } from "@/components/finder/Finder";
 import { Console } from "@/components/console/Console";
 
 type View = "map" | "console";
+
+// Loaded once here (not per-tab) so the Map tab and Console's address
+// autocomplete share a single Maps JS instance instead of each loading
+// their own copy of the script.
+const BROWSER_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ?? "";
 
 export function AppShell({
   groups: initialGroups,
@@ -78,22 +84,36 @@ export function AppShell({
       </div>
 
       {/* both stay mounted so in-progress edits survive tab switches */}
-      <div
-        className={`min-h-0 flex-1 flex-col ${view === "map" ? "flex" : "hidden"}`}
-      >
-        <Finder groups={groups} people={people} />
-      </div>
-      <div
-        className={`min-h-0 flex-1 flex-col ${view === "console" ? "flex" : "hidden"}`}
-      >
-        <Console
-          groups={groups}
-          setGroups={setGroups}
-          people={people}
-          setPeople={setPeople}
-          persisted={persisted}
-        />
-      </div>
+      <MapsScope>
+        <div
+          className={`min-h-0 flex-1 flex-col ${view === "map" ? "flex" : "hidden"}`}
+        >
+          <Finder groups={groups} people={people} />
+        </div>
+        <div
+          className={`min-h-0 flex-1 flex-col ${view === "console" ? "flex" : "hidden"}`}
+        >
+          <Console
+            groups={groups}
+            setGroups={setGroups}
+            people={people}
+            setPeople={setPeople}
+            persisted={persisted}
+          />
+        </div>
+      </MapsScope>
     </div>
+  );
+}
+
+/** Only wraps in APIProvider (and loads the Maps JS script) when a browser
+ * key is actually configured, so demo mode stays free of Google network
+ * calls and console noise. */
+function MapsScope({ children }: { children: React.ReactNode }) {
+  if (!BROWSER_KEY) return <>{children}</>;
+  return (
+    <APIProvider apiKey={BROWSER_KEY} libraries={["places", "marker"]}>
+      {children}
+    </APIProvider>
   );
 }
