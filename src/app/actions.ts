@@ -2,10 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { geocodeAddress } from "@/lib/geocode";
 import type { Group, Person } from "@/lib/types";
 
 // Map domain records back to DB rows (camelCase -> snake_case).
-function groupToRow(g: Group) {
+function groupToRow(g: Group, geo?: { lat: number; lng: number } | null) {
   return {
     id: g.id,
     name: g.name,
@@ -27,6 +28,8 @@ function groupToRow(g: Group) {
     contact_email: g.contactEmail,
     address: g.address,
     description: g.desc,
+    lat: geo ? geo.lat : (g.lat ?? null),
+    lng: geo ? geo.lng : (g.lng ?? null),
     x: g.x ?? null,
     y: g.y ?? null,
   };
@@ -67,9 +70,53 @@ async function requireLeader() {
 export async function saveGroup(group: Group): Promise<ActionResult> {
   const { supabase } = await requireLeader();
   if (!supabase) return { ok: true, persisted: false };
-  const { error } = await supabase.from("groups").upsert(groupToRow(group));
+
+  // Re-geocode on every save when there's an address. At this app's real
+  // usage volume (a coordinator saving a handful of groups) this is well
+  // inside the free tier, and always-fresh is simpler and more reliable
+  // than diffing against the stored address to decide whether to call it.
+  const geo = group.address.trim()
+    ? await geocodeAddress(group.address)
+    : null;
+
+  const { error } = await supabase.from("groups").upsert(groupToRow(group, geo));
   if (error) return { ok: false, error: error.message, persisted: true };
   return { ok: true, persisted: true };
+}
+
+/**
+ * One-time helper for groups that already have an address but were created
+ * before geocoding existed (e.g. the original seed data) — geocodes and
+ * saves every group missing coordinates. Safe to call repeatedly; it only
+ * touches groups where lat/lng is still null.
+ */
+export async function backfillGroupLocations(): Promise<
+  ActionResult & { updated: number }
+> {
+  const { supabase } = await requireLeader();
+  if (!supabase) return { ok: true, persisted: false, updated: 0 };
+
+  const { data, error: fetchError } = await supabase
+    .from("groups")
+    .select("id, address, lat, lng")
+    .is("lat", null)
+    .not("address", "eq", "");
+  if (fetchError) {
+    return { ok: false, error: fetchError.message, persisted: true, updated: 0 };
+  }
+
+  let updated = 0;
+  for (const row of data ?? []) {
+    const geo = await geocodeAddress(row.address);
+    if (!geo) continue;
+    const { error } = await supabase
+      .from("groups")
+      .update({ lat: geo.lat, lng: geo.lng })
+      .eq("id", row.id);
+    if (!error) updated += 1;
+  }
+
+  return { ok: true, persisted: true, updated };
 }
 
 export async function savePerson(person: Person): Promise<ActionResult> {

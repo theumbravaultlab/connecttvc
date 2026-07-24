@@ -1,17 +1,25 @@
 "use client";
 
+import { useEffect } from "react";
+import { APIProvider, AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
 import type { Group } from "@/lib/types";
 import { lifeColors } from "@/lib/colors";
 
-// ============================================================
-// PHASE 3: replace this stylized placeholder with a real Google Map.
-// Render a <div> map container, load the Maps JavaScript API with the
-// browser key, and drop one AdvancedMarkerElement per group using the
-// same teardrop markup below. Keep the list<->pin selection wiring.
-// This is an internal, login-only coordinator tool, so the map may plot
-// real group locations (getGroups). Keep addresses out of any future
-// public-facing surface if one is ever added.
-// ============================================================
+const BROWSER_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ?? "";
+// "DEMO_MAP_ID" is Google's official placeholder for local development —
+// swap in a real Map ID (Google Cloud → Maps Management → Map IDs) before
+// deploying; it's a free, non-secret identifier, not an API key.
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID";
+
+// Geographic center of the contiguous US — only used until any group has a
+// real geocoded location.
+const FALLBACK_CENTER = { lat: 39.8283, lng: -98.5795 };
+
+type LocatedGroup = Group & { lat: number; lng: number };
+
+function hasLocation(g: Group): g is LocatedGroup {
+  return typeof g.lat === "number" && typeof g.lng === "number";
+}
 
 export function FinderMap({
   groups,
@@ -22,67 +30,123 @@ export function FinderMap({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
-  return (
-    <div className="relative h-full w-full overflow-hidden bg-[#eaf3fc]">
-      {/* soft terrain blobs */}
-      <div
-        className="absolute rounded-[46%]"
-        style={{ left: "6%", top: "12%", width: 220, height: 180, background: "oklch(0.9 0.06 150)" }}
-      />
-      <div
-        className="absolute rounded-[46%]"
-        style={{ right: "8%", top: "8%", width: 190, height: 150, background: "oklch(0.9 0.05 150)" }}
-      />
-      <div
-        className="absolute rounded-[50%]"
-        style={{ left: "34%", bottom: "6%", width: 260, height: 150, background: "oklch(0.88 0.06 235)" }}
-      />
-      {/* roads */}
-      <div className="absolute left-0 right-0 top-[42%] h-[6px] -rotate-3 bg-white/80" />
-      <div className="absolute bottom-[26%] left-[20%] top-[-10%] w-[6px] rotate-6 bg-white/70" />
-
-      {/* pins */}
-      {groups.map((g, i) => {
-        const c = lifeColors(g.life);
-        const selected = g.id === selectedId;
-        return (
-          <button
-            key={g.id}
-            onClick={() => onSelect(g.id)}
-            aria-label={`${g.name} pin`}
-            className="absolute -translate-x-1/2 -translate-y-full transition-transform duration-150"
-            style={{
-              left: `${g.x ?? 50}%`,
-              top: `${g.y ?? 50}%`,
-              zIndex: selected ? 30 : 10,
-              transform: `translate(-50%,-100%) scale(${selected ? 1.16 : 1})`,
-            }}
-          >
-            <span
-              className="flex h-[30px] w-[30px] items-center justify-center"
-              style={{
-                background: c.solid,
-                borderRadius: "50% 50% 50% 0",
-                transform: "rotate(-45deg)",
-                boxShadow: selected
-                  ? "0 8px 18px rgba(8,141,249,.42), 0 0 0 4px rgba(255,255,255,.95)"
-                  : "0 3px 9px rgba(22,50,79,.3)",
-              }}
-            >
-              <span
-                className="text-[12px] font-extrabold text-white"
-                style={{ transform: "rotate(45deg)" }}
-              >
-                {i + 1}
-              </span>
-            </span>
-          </button>
-        );
-      })}
-
-      <div className="absolute bottom-3 right-3 rounded-full bg-white/85 px-3 py-1 text-[10.5px] font-bold text-[#5b7a97] backdrop-blur">
-        Map preview · Google Maps in production
+  if (!BROWSER_KEY) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-[#eaf3fc] p-6 text-center text-[13px] font-semibold text-[#5b7a97]">
+        Map needs a Google Maps browser key — add
+        NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY to .env.local.
       </div>
+    );
+  }
+
+  return (
+    <APIProvider apiKey={BROWSER_KEY}>
+      <MapInner groups={groups} selectedId={selectedId} onSelect={onSelect} />
+    </APIProvider>
+  );
+}
+
+function MapInner({
+  groups,
+  selectedId,
+  onSelect,
+}: {
+  groups: Group[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const located = groups.filter(hasLocation);
+  const missing = groups.length - located.length;
+
+  return (
+    <div className="relative h-full w-full">
+      <Map
+        mapId={MAP_ID}
+        defaultCenter={located[0] ? { lat: located[0].lat, lng: located[0].lng } : FALLBACK_CENTER}
+        defaultZoom={located.length ? 11 : 4}
+        gestureHandling="greedy"
+        disableDefaultUI={false}
+        className="h-full w-full"
+      >
+        <FitToGroups groups={located} />
+        {located.map((g, i) => (
+          <GroupPin
+            key={g.id}
+            group={g}
+            index={i}
+            selected={g.id === selectedId}
+            onSelect={onSelect}
+          />
+        ))}
+      </Map>
+
+      {missing > 0 && (
+        <div className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[10.5px] font-bold text-[#5b7a97] backdrop-blur">
+          {missing} group{missing === 1 ? "" : "s"} missing a location — save
+          its address in the Console to place it on the map.
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Fits/recenters the map whenever the visible (filtered) group set changes. */
+function FitToGroups({ groups }: { groups: LocatedGroup[] }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || groups.length === 0) return;
+    if (groups.length === 1) {
+      map.setCenter({ lat: groups[0].lat, lng: groups[0].lng });
+      map.setZoom(13);
+      return;
+    }
+    const bounds = new google.maps.LatLngBounds();
+    groups.forEach((g) => bounds.extend({ lat: g.lat, lng: g.lng }));
+    map.fitBounds(bounds, 60);
+  }, [map, groups]);
+
+  return null;
+}
+
+function GroupPin({
+  group,
+  index,
+  selected,
+  onSelect,
+}: {
+  group: LocatedGroup;
+  index: number;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const c = lifeColors(group.life);
+
+  return (
+    <AdvancedMarker
+      position={{ lat: group.lat, lng: group.lng }}
+      onClick={() => onSelect(group.id)}
+      zIndex={selected ? 30 : 10}
+      title={group.name}
+    >
+      <span
+        className="flex h-[30px] w-[30px] items-center justify-center transition-transform duration-150"
+        style={{
+          background: c.solid,
+          borderRadius: "50% 50% 50% 0",
+          transform: `rotate(-45deg) scale(${selected ? 1.16 : 1})`,
+          boxShadow: selected
+            ? "0 8px 18px rgba(8,141,249,.42), 0 0 0 4px rgba(255,255,255,.95)"
+            : "0 3px 9px rgba(22,50,79,.3)",
+        }}
+      >
+        <span
+          className="text-[12px] font-extrabold text-white"
+          style={{ transform: "rotate(45deg)" }}
+        >
+          {index + 1}
+        </span>
+      </span>
+    </AdvancedMarker>
   );
 }

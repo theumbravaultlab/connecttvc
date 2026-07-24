@@ -3,7 +3,13 @@
 import { useTransition, useState, type Dispatch, type SetStateAction } from "react";
 import type { Group, Person } from "@/lib/types";
 import { initialsOf } from "@/lib/types";
-import { deleteGroup, deletePerson, saveGroup, savePerson } from "@/app/actions";
+import {
+  backfillGroupLocations,
+  deleteGroup,
+  deletePerson,
+  saveGroup,
+  savePerson,
+} from "@/app/actions";
 import {
   Avatar,
   CapacityBar,
@@ -60,6 +66,35 @@ export function Console({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [mobileSub, setMobileSub] = useState<"list" | "edit">("list");
   const [isPending, startTransition] = useTransition();
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const [isBackfilling, setIsBackfilling] = useState(false);
+
+  const missingLocations = groups.filter(
+    (g) => g.address.trim() && (g.lat == null || g.lng == null),
+  ).length;
+
+  const handleBackfill = () => {
+    setIsBackfilling(true);
+    setBackfillMsg(null);
+    startTransition(async () => {
+      const result = await backfillGroupLocations();
+      setIsBackfilling(false);
+      if (!result.ok) {
+        setBackfillMsg(result.error ?? "Backfill failed — try again.");
+        return;
+      }
+      setBackfillMsg(
+        result.updated > 0
+          ? `Placed ${result.updated} group${result.updated === 1 ? "" : "s"} on the map.`
+          : "No groups needed geocoding.",
+      );
+      if (result.updated > 0) {
+        // The action wrote lat/lng directly to the DB (not through
+        // patchGroup), so refetch to pick the new values up client-side.
+        window.location.reload();
+      }
+    });
+  };
 
   const clearFeedback = () => {
     setSaveState("idle");
@@ -207,14 +242,32 @@ export function Console({
             </button>
           ))}
         </div>
-        <button
-          onClick={tab === "groups" ? addGroup : addPerson}
-          className="flex items-center gap-1.5 rounded-full border border-[#a3cbfc] px-3.5 py-1.5 text-[12.5px] font-bold text-[#088df9] transition-colors hover:bg-[#f2f8ff]"
-        >
-          <PlusIcon width={15} height={15} />
-          {tab === "groups" ? "New group" : "New person"}
-        </button>
+        <div className="flex items-center gap-2">
+          {tab === "groups" && missingLocations > 0 && (
+            <button
+              onClick={handleBackfill}
+              disabled={isBackfilling}
+              className="rounded-full px-3.5 py-1.5 text-[12.5px] font-bold text-[#5b7a97] transition-colors hover:bg-[#f2f6fb] disabled:opacity-60"
+            >
+              {isBackfilling
+                ? "Placing on map…"
+                : `Place ${missingLocations} on map`}
+            </button>
+          )}
+          <button
+            onClick={tab === "groups" ? addGroup : addPerson}
+            className="flex items-center gap-1.5 rounded-full border border-[#a3cbfc] px-3.5 py-1.5 text-[12.5px] font-bold text-[#088df9] transition-colors hover:bg-[#f2f8ff]"
+          >
+            <PlusIcon width={15} height={15} />
+            {tab === "groups" ? "New group" : "New person"}
+          </button>
+        </div>
       </div>
+      {backfillMsg && (
+        <div className="shrink-0 border-b border-[#eef3f8] bg-[#f7fafd] px-4 py-1.5 text-[11.5px] font-bold text-[#5b7a97] sm:px-[18px]">
+          {backfillMsg}
+        </div>
+      )}
 
       {/* body */}
       <div className="flex h-full min-h-0 flex-1 flex-col md:flex-row">
