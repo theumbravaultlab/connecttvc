@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { geocodeAddress } from "@/lib/geocode";
+import { getTravelTimes, type TravelTime } from "@/lib/routes";
 import type { Group, Person } from "@/lib/types";
 
 // Map domain records back to DB rows (camelCase -> snake_case).
@@ -35,13 +36,14 @@ function groupToRow(g: Group, geo?: { lat: number; lng: number } | null) {
   };
 }
 
-function personToRow(p: Person) {
+function personToRow(p: Person, geo?: { lat: number; lng: number } | null) {
   return {
     id: p.id,
     name: p.name,
     email: p.email,
     phone: p.phone,
     area: p.area,
+    address: p.address,
     days: p.days,
     time_pref: p.timePref,
     life: p.life,
@@ -52,6 +54,8 @@ function personToRow(p: Person) {
     group_id: p.group,
     joined: p.joined,
     notes: p.notes,
+    lat: geo ? geo.lat : (p.lat ?? null),
+    lng: geo ? geo.lng : (p.lng ?? null),
   };
 }
 
@@ -122,9 +126,57 @@ export async function backfillGroupLocations(): Promise<
 export async function savePerson(person: Person): Promise<ActionResult> {
   const { supabase } = await requireLeader();
   if (!supabase) return { ok: true, persisted: false };
-  const { error } = await supabase.from("people").upsert(personToRow(person));
+
+  const geo = person.address.trim()
+    ? await geocodeAddress(person.address)
+    : null;
+
+  const { error } = await supabase.from("people").upsert(personToRow(person, geo));
   if (error) return { ok: false, error: error.message, persisted: true };
   return { ok: true, persisted: true };
+}
+
+/** Same idea as backfillGroupLocations, for people with an address but no
+ * coordinates yet (e.g. the seed data, or rows saved before this feature). */
+export async function backfillPersonLocations(): Promise<
+  ActionResult & { updated: number }
+> {
+  const { supabase } = await requireLeader();
+  if (!supabase) return { ok: true, persisted: false, updated: 0 };
+
+  const { data, error: fetchError } = await supabase
+    .from("people")
+    .select("id, address, lat, lng")
+    .is("lat", null)
+    .not("address", "eq", "");
+  if (fetchError) {
+    return { ok: false, error: fetchError.message, persisted: true, updated: 0 };
+  }
+
+  let updated = 0;
+  for (const row of data ?? []) {
+    const geo = await geocodeAddress(row.address);
+    if (!geo) continue;
+    const { error } = await supabase
+      .from("people")
+      .update({ lat: geo.lat, lng: geo.lng })
+      .eq("id", row.id);
+    if (!error) updated += 1;
+  }
+
+  return { ok: true, persisted: true, updated };
+}
+
+/** Drive time from a person's location to each of the given groups, in one
+ * batched Routes API call. Read-only, but still auth-gated — server actions
+ * are reachable via direct POST regardless of the UI, so this shouldn't
+ * skip the same check every other action here makes. */
+export async function getTravelTimesToGroups(
+  origin: { lat: number; lng: number },
+  groups: { id: string; lat: number; lng: number }[],
+): Promise<Record<string, TravelTime>> {
+  await requireLeader();
+  return getTravelTimes(origin, groups);
 }
 
 export async function deleteGroup(id: string): Promise<ActionResult> {

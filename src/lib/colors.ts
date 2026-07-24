@@ -27,13 +27,16 @@ export function lifeColors(life: LifeStage) {
 
 // Status hues shared by group + person status pills.
 const STATUS_HUE: Record<string, number> = {
+  // groups
   Active: 150,
-  Matched: 150,
   Forming: 235,
-  Waitlisted: 235,
   Paused: 70,
-  Unassigned: 70,
   Full: 20,
+  // people
+  New: 235,
+  "Actively Searching": 70,
+  Waitlisted: 35,
+  Grouped: 150,
 };
 
 export function statusColors(status: GroupStatus | PersonStatus) {

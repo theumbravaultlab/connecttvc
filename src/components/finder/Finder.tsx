@@ -12,6 +12,8 @@ import {
 } from "@/lib/types";
 import { Avatar } from "@/components/ui";
 import { SearchIcon, XIcon } from "@/components/icons";
+import { getTravelTimesToGroups } from "@/app/actions";
+import type { TravelTime } from "@/lib/routes";
 import { FinderMap } from "./FinderMap";
 import { GroupCard } from "./GroupCard";
 
@@ -32,6 +34,7 @@ export function Finder({
   const [personId, setPersonId] = useState<string>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
+  const [travelTimes, setTravelTimes] = useState<Record<string, TravelTime>>({});
   const findingForId = useId();
   const areaId = useId();
   const lifeId = useId();
@@ -68,6 +71,36 @@ export function Finder({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered]);
+
+  // Drive time from the selected person to every visible group, batched
+  // into one Routes API call. Depends on primitive lat/lng/id rather than
+  // the `person` object itself so editing an unrelated field elsewhere
+  // (e.g. in the Console, since state is shared) doesn't trigger a refetch.
+  useEffect(() => {
+    if (!person || person.lat == null || person.lng == null) {
+      setTravelTimes({});
+      return;
+    }
+    const destinations = filtered
+      .filter((g): g is typeof g & { lat: number; lng: number } =>
+        g.lat != null && g.lng != null,
+      )
+      .map((g) => ({ id: g.id, lat: g.lat, lng: g.lng }));
+    if (destinations.length === 0) {
+      setTravelTimes({});
+      return;
+    }
+    let cancelled = false;
+    getTravelTimesToGroups({ lat: person.lat, lng: person.lng }, destinations).then(
+      (result) => {
+        if (!cancelled) setTravelTimes(result);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [person?.id, person?.lat, person?.lng, filtered]);
 
   // Scroll the selected card into view within the list container.
   const listRef = useRef<HTMLDivElement>(null);
@@ -259,6 +292,7 @@ export function Finder({
                     selected={g.id === selectedId}
                     greatFit={!!person && g.life === person.life}
                     matchName={person?.name.split(" ")[0]}
+                    travelTime={travelTimes[g.id]}
                     onSelect={() => setSelectedId(g.id)}
                   />
                 ))}
@@ -273,6 +307,7 @@ export function Finder({
         >
           <FinderMap
             groups={filtered}
+            person={person}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />

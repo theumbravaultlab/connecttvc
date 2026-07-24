@@ -3,6 +3,7 @@
 import {
   AREAS,
   LIFE_STAGES,
+  PERSON_STATUSES,
   initialsOf,
   type DayShort,
   type Group,
@@ -17,6 +18,7 @@ import {
   TextInput,
   Toggle,
 } from "@/components/ui";
+import { AddressAutocomplete } from "./AddressAutocomplete";
 import { SectionHeading, Field } from "./form-bits";
 
 export function PersonForm({
@@ -109,6 +111,13 @@ export function PersonForm({
             <DayPills value={person.days} onToggle={toggleDay} />
           </div>
         </Field>
+        <Field full label="Home address" tag="Members only">
+          <AddressAutocomplete
+            value={person.address}
+            onChange={(address) => onPatch({ address })}
+            placeholder="Start typing an address…"
+          />
+        </Field>
       </div>
 
       <SectionHeading>Fit</SectionHeading>
@@ -158,7 +167,7 @@ export function PersonForm({
               onPatch({ status: e.target.value as Person["status"] })
             }
           >
-            {["Unassigned", "Matched", "Waitlisted"].map((s) => (
+            {PERSON_STATUSES.map((s) => (
               <option key={s}>{s}</option>
             ))}
           </SelectInput>
@@ -182,7 +191,7 @@ export function PersonForm({
             ))}
           </SelectInput>
         </Field>
-        {person.status === "Matched" && person.group && (
+        {person.status === "Grouped" && person.group && (
           <div className="w-full rounded-xl bg-[#fdf9ef] px-3 py-2.5 text-[12px] font-semibold text-[#a9812f]">
             Tip: "Current members" on {groupName} is tracked separately — if
             this is a new permanent placement, update it on the Groups tab too.

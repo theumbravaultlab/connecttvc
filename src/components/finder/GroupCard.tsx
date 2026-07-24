@@ -3,9 +3,10 @@
 import { forwardRef } from "react";
 import type { Group } from "@/lib/types";
 import { DAY_LONG } from "@/lib/types";
+import type { TravelTime } from "@/lib/routes";
 import { lifeColors } from "@/lib/colors";
 import { LifeTag, SpotsPill } from "@/components/ui";
-import { ClockIcon, LockIcon, PinIcon, StarIcon } from "@/components/icons";
+import { CarIcon, ClockIcon, LockIcon, PinIcon, StarIcon } from "@/components/icons";
 
 function InfoRow({
   color,
@@ -37,10 +38,11 @@ export const GroupCard = forwardRef<
     selected: boolean;
     greatFit: boolean;
     matchName?: string;
+    travelTime?: TravelTime;
     onSelect: () => void;
   }
 >(function GroupCard(
-  { group, selected, greatFit, matchName, onSelect },
+  { group, selected, greatFit, matchName, travelTime, onSelect },
   ref,
 ) {
   const c = lifeColors(group.life);
@@ -77,9 +79,17 @@ export const GroupCard = forwardRef<
             <SpotsPill members={group.members} capacity={group.capacity} />
           </div>
 
-          <div className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-[#5b7a97]">
-            <ClockIcon width={14} height={14} />
-            {dayLong}s · {group.time}
+          <div className="mt-1.5 flex items-center justify-between gap-2 text-[12.5px] font-semibold text-[#5b7a97]">
+            <span className="flex items-center gap-1.5">
+              <ClockIcon width={14} height={14} />
+              {dayLong}s · {group.time}
+            </span>
+            {travelTime && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#f2f8ff] px-2 py-[3px] text-[11px] font-bold text-[#088df9]">
+                <CarIcon width={12} height={12} />
+                {travelTime.text}
+              </span>
+            )}
           </div>
 
           <div className="mt-1 flex items-center justify-between gap-2">

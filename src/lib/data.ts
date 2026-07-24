@@ -45,6 +45,7 @@ function rowToPerson(r: any): Person {
     email: r.email ?? "",
     phone: r.phone ?? "",
     area: r.area,
+    address: r.address ?? "",
     days: r.days ?? [],
     timePref: r.time_pref,
     life: r.life,
@@ -55,6 +56,8 @@ function rowToPerson(r: any): Person {
     group: r.group_id ? String(r.group_id) : null,
     joined: r.joined ?? "",
     notes: r.notes ?? "",
+    lat: r.lat,
+    lng: r.lng,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

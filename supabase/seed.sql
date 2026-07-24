@@ -23,17 +23,17 @@ on conflict (id) do update set
   description=excluded.description, x=excluded.x, y=excluded.y;
 
 insert into public.people
-  (id, name, email, phone, area, days, time_pref, life, interests,
+  (id, name, email, phone, area, address, days, time_pref, life, interests,
    childcare_needed, accessibility, status, group_id, joined, notes)
 values
-  ('js','John Smith','john.smith@email.com','(555) 201-4478','Midtown','{Mon,Tue,Fri}','Evenings','Couples','Marriage, serving together',false,'—','Unassigned',null,'Jun 2026','Recently married, new to Connect TVC and eager to plug in.'),
-  ('sl','Sarah Lopez','sarah.lopez@email.com','(555) 664-1120','Eastside','{Tue,Thu}','Evenings','Families','Parenting, cooking',true,'—','Matched','1','Feb 2026','Family of four, needs childcare on meeting nights.'),
-  ('mb','Marcus Bell','marcus.b@email.com','(555) 903-7781','North Hills','{Thu,Sun}','Flexible','Everyone','Hiking, apologetics',false,'Prefers ground-floor access','Waitlisted',null,'May 2026','New in town, flexible on timing.'),
-  ('aw','Aisha Warren','aisha.w@email.com','(555) 448-2093','Downtown','{Wed,Sat}','Mornings','Young Adults','Worship, mentoring',false,'—','Unassigned',null,'Jul 2026','Prefers an early-morning group downtown.'),
-  ('dt','David Tran','david.tran@email.com','(555) 771-5560','Midtown','{Mon,Thu}','Afternoons','Students','Study groups, gaming',false,'—','Matched','5','Aug 2026','Sophomore, connected through campus ministry.')
+  ('js','John Smith','john.smith@email.com','(555) 201-4478','Midtown','210 Campus Ave, Midtown','{Mon,Tue,Fri}','Evenings','Couples','Marriage, serving together',false,'—','New',null,'Jun 2026','Recently married, new to Connect TVC and eager to plug in.'),
+  ('sl','Sarah Lopez','sarah.lopez@email.com','(555) 664-1120','Eastside','88 Willow St, Eastside','{Tue,Thu}','Evenings','Families','Parenting, cooking',true,'—','Grouped','1','Feb 2026','Family of four, needs childcare on meeting nights.'),
+  ('mb','Marcus Bell','marcus.b@email.com','(555) 903-7781','North Hills','45 Ridge Rd, North Hills','{Thu,Sun}','Flexible','Everyone','Hiking, apologetics',false,'Prefers ground-floor access','Waitlisted',null,'May 2026','New in town, flexible on timing.'),
+  ('aw','Aisha Warren','aisha.w@email.com','(555) 448-2093','Downtown','12 Market Sq, Downtown','{Wed,Sat}','Mornings','Young Adults','Worship, mentoring',false,'—','Actively Searching',null,'Jul 2026','Prefers an early-morning group downtown.'),
+  ('dt','David Tran','david.tran@email.com','(555) 771-5560','Midtown','300 University Dr, Midtown','{Mon,Thu}','Afternoons','Students','Study groups, gaming',false,'—','Grouped','5','Aug 2026','Sophomore, connected through campus ministry.')
 on conflict (id) do update set
   name=excluded.name, email=excluded.email, phone=excluded.phone, area=excluded.area,
-  days=excluded.days, time_pref=excluded.time_pref, life=excluded.life,
+  address=excluded.address, days=excluded.days, time_pref=excluded.time_pref, life=excluded.life,
   interests=excluded.interests, childcare_needed=excluded.childcare_needed,
   accessibility=excluded.accessibility, status=excluded.status,
   group_id=excluded.group_id, joined=excluded.joined, notes=excluded.notes;

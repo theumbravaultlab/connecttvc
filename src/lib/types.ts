@@ -10,7 +10,17 @@ export type LifeStage =
   | "Students";
 
 export type GroupStatus = "Active" | "Forming" | "Paused" | "Full";
-export type PersonStatus = "Unassigned" | "Matched" | "Waitlisted";
+export type PersonStatus =
+  | "New"
+  | "Actively Searching"
+  | "Waitlisted"
+  | "Grouped";
+export const PERSON_STATUSES: PersonStatus[] = [
+  "New",
+  "Actively Searching",
+  "Waitlisted",
+  "Grouped",
+];
 export type Format = "In-person" | "Hybrid" | "Online";
 export type Frequency = "Weekly" | "Every other week" | "Monthly";
 export type TimePref = "Mornings" | "Afternoons" | "Evenings" | "Flexible";
@@ -74,6 +84,7 @@ export interface Person {
   email: string;
   phone: string;
   area: string;
+  address: string; // home address, private — used for routing/map only
   days: DayShort[];
   timePref: TimePref;
   life: LifeStage;
@@ -84,6 +95,9 @@ export interface Person {
   group: string | null; // assigned group id
   joined: string;
   notes: string;
+  // Geo (populated by geocoding on save), same pattern as Group.
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export const DAY_LONG: Record<DayShort, string> = {

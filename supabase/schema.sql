@@ -88,16 +88,19 @@ create table if not exists public.people (
   email text default '',
   phone text default '',
   area text not null default 'Eastside',
+  address text default '',            -- PRIVATE: home address (for routing/map)
   days text[] not null default '{}',
   time_pref text not null default 'Flexible',
   life text not null default 'Everyone',
   interests text default '',
   childcare_needed boolean not null default false,
   accessibility text default '—',
-  status text not null default 'Unassigned',
+  status text not null default 'New', -- New | Actively Searching | Waitlisted | Grouped
   group_id text references public.groups (id) on delete set null,
   joined text default '',
   notes text default '',
+  lat double precision,               -- PRIVATE: geocoded point
+  lng double precision,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

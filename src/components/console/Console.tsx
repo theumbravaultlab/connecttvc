@@ -5,6 +5,7 @@ import type { Group, Person } from "@/lib/types";
 import { initialsOf } from "@/lib/types";
 import {
   backfillGroupLocations,
+  backfillPersonLocations,
   deleteGroup,
   deletePerson,
   saveGroup,
@@ -30,9 +31,10 @@ const blankGroup = (id: string): Group => ({
 });
 
 const blankPerson = (id: string): Person => ({
-  id, name: "New Member", email: "", phone: "", area: "Eastside", days: [],
-  timePref: "Flexible", life: "Everyone", interests: "", childcareNeeded: false,
-  accessibility: "—", status: "Unassigned", group: null, joined: "", notes: "",
+  id, name: "New Member", email: "", phone: "", area: "Eastside", address: "",
+  days: [], timePref: "Flexible", life: "Everyone", interests: "",
+  childcareNeeded: false, accessibility: "—", status: "New", group: null,
+  joined: "", notes: "",
 });
 
 function validateGroup(g: Group): string | null {
@@ -69,15 +71,25 @@ export function Console({
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
   const [isBackfilling, setIsBackfilling] = useState(false);
 
-  const missingLocations = groups.filter(
+  const missingGroupLocations = groups.filter(
     (g) => g.address.trim() && (g.lat == null || g.lng == null),
   ).length;
+  const missingPersonLocations = people.filter(
+    (p) => p.address.trim() && (p.lat == null || p.lng == null),
+  ).length;
+  const missingLocations =
+    tab === "groups" ? missingGroupLocations : missingPersonLocations;
 
   const handleBackfill = () => {
     setIsBackfilling(true);
     setBackfillMsg(null);
+    const plural = (n: number) =>
+      tab === "groups" ? `group${n === 1 ? "" : "s"}` : n === 1 ? "person" : "people";
     startTransition(async () => {
-      const result = await backfillGroupLocations();
+      const result =
+        tab === "groups"
+          ? await backfillGroupLocations()
+          : await backfillPersonLocations();
       setIsBackfilling(false);
       if (!result.ok) {
         setBackfillMsg(result.error ?? "Backfill failed — try again.");
@@ -85,12 +97,12 @@ export function Console({
       }
       setBackfillMsg(
         result.updated > 0
-          ? `Placed ${result.updated} group${result.updated === 1 ? "" : "s"} on the map.`
-          : "No groups needed geocoding.",
+          ? `Placed ${result.updated} ${plural(result.updated)} on the map.`
+          : `No ${tab} needed geocoding.`,
       );
       if (result.updated > 0) {
         // The action wrote lat/lng directly to the DB (not through
-        // patchGroup), so refetch to pick the new values up client-side.
+        // patchGroup/patchPerson), so refetch to pick the new values up.
         window.location.reload();
       }
     });
@@ -243,7 +255,7 @@ export function Console({
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {tab === "groups" && missingLocations > 0 && (
+          {missingLocations > 0 && (
             <button
               onClick={handleBackfill}
               disabled={isBackfilling}

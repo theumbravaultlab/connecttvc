@@ -26,6 +26,15 @@ export const SearchIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const CarIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11" />
+    <rect x="3" y="11" width="18" height="6" rx="2" />
+    <circle cx="7.5" cy="17" r="1.5" />
+    <circle cx="16.5" cy="17" r="1.5" />
+  </svg>
+);
+
 export const PinIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M12 21s-6-5.4-6-10a6 6 0 0 1 12 0c0 4.6-6 10-6 10Z" />

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
-import type { Group } from "@/lib/types";
+import { initialsOf, type Group, type Person } from "@/lib/types";
 import { lifeColors } from "@/lib/colors";
 
 const BROWSER_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ?? "";
@@ -16,9 +16,15 @@ const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID";
 const FALLBACK_CENTER = { lat: 39.8283, lng: -98.5795 };
 
 type LocatedGroup = Group & { lat: number; lng: number };
+type LatLng = { lat: number; lng: number };
 
 function hasLocation(g: Group): g is LocatedGroup {
   return typeof g.lat === "number" && typeof g.lng === "number";
+}
+
+function personLocation(p: Person | null | undefined): LatLng | null {
+  if (!p || typeof p.lat !== "number" || typeof p.lng !== "number") return null;
+  return { lat: p.lat, lng: p.lng };
 }
 
 // Note: no <APIProvider> here — it's mounted once at the AppShell level so
@@ -26,10 +32,14 @@ function hasLocation(g: Group): g is LocatedGroup {
 // Maps JS instance instead of loading the script twice.
 export function FinderMap({
   groups,
+  person,
   selectedId,
   onSelect,
 }: {
   groups: Group[];
+  /** The currently selected "Finding for" person, if any — shown as a
+   * distinct pin and included when fitting the map to visible points. */
+  person?: Person | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
@@ -44,18 +54,22 @@ export function FinderMap({
 
   const located = groups.filter(hasLocation);
   const missing = groups.length - located.length;
+  const personPoint = personLocation(person);
+  const fitPoints: LatLng[] = personPoint
+    ? [...located, personPoint]
+    : located;
 
   return (
     <div className="relative h-full w-full">
       <Map
         mapId={MAP_ID}
-        defaultCenter={located[0] ? { lat: located[0].lat, lng: located[0].lng } : FALLBACK_CENTER}
-        defaultZoom={located.length ? 11 : 4}
+        defaultCenter={fitPoints[0] ?? FALLBACK_CENTER}
+        defaultZoom={fitPoints.length ? 11 : 4}
         gestureHandling="greedy"
         disableDefaultUI={false}
         className="h-full w-full"
       >
-        <FitToGroups groups={located} />
+        <FitToPoints points={fitPoints} />
         {located.map((g, i) => (
           <GroupPin
             key={g.id}
@@ -65,6 +79,9 @@ export function FinderMap({
             onSelect={onSelect}
           />
         ))}
+        {person && personPoint && (
+          <PersonPin person={person} position={personPoint} />
+        )}
       </Map>
 
       {missing > 0 && (
@@ -77,21 +94,22 @@ export function FinderMap({
   );
 }
 
-/** Fits/recenters the map whenever the visible (filtered) group set changes. */
-function FitToGroups({ groups }: { groups: LocatedGroup[] }) {
+/** Fits/recenters the map whenever the visible points (groups + selected
+ * person) change. */
+function FitToPoints({ points }: { points: LatLng[] }) {
   const map = useMap();
 
   useEffect(() => {
-    if (!map || groups.length === 0) return;
-    if (groups.length === 1) {
-      map.setCenter({ lat: groups[0].lat, lng: groups[0].lng });
+    if (!map || points.length === 0) return;
+    if (points.length === 1) {
+      map.setCenter(points[0]);
       map.setZoom(13);
       return;
     }
     const bounds = new google.maps.LatLngBounds();
-    groups.forEach((g) => bounds.extend({ lat: g.lat, lng: g.lng }));
+    points.forEach((p) => bounds.extend(p));
     map.fitBounds(bounds, 60);
-  }, [map, groups]);
+  }, [map, points]);
 
   return null;
 }
@@ -128,11 +146,30 @@ function GroupPin({
         }}
       >
         <span
-          className="text-[12px] font-extrabold text-white"
+          className="text-[10.5px] font-extrabold text-white"
           style={{ transform: "rotate(45deg)" }}
         >
-          {index + 1}
+          {initialsOf(group.name)}
         </span>
+      </span>
+    </AdvancedMarker>
+  );
+}
+
+/** Distinct "you are here"-style pin for the person "Finding for" is set
+ * to — a circle (not a teardrop) in brand blue so it never reads as just
+ * another group. */
+function PersonPin({ person, position }: { person: Person; position: LatLng }) {
+  return (
+    <AdvancedMarker position={position} zIndex={40} title={person.name}>
+      <span
+        className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-[11px] font-extrabold text-white"
+        style={{
+          background: "#088df9",
+          boxShadow: "0 0 0 3px #fff, 0 8px 18px rgba(8,141,249,.42)",
+        }}
+      >
+        {initialsOf(person.name)}
       </span>
     </AdvancedMarker>
   );
