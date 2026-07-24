@@ -1,26 +1,60 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Connect TVC design tokens (from design handoff)
+   ============================================================ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --brand-blue: #088df9;
+  --brand-blue-light: #a3cbfc;
+  --white: #ffffff;
+
+  --ink: #16324f;
+  --muted: #5b7a97;
+  --faint: #8aa0b4;
+  --body-detail: #4a6076;
+
+  --page-bg: #e7eef6;
+  --panel-1: #f7fafd;
+  --panel-2: #f2f8ff;
+  --panel-3: #eef6ff;
+  --border: #dbe7f3;
+  --divider: #eef3f8;
+  --divider-2: #e6eef6;
+  --card-selected: #f4f8ff;
+
+  --amber-bg: #fdf3e2;
+  --amber-fg: #c78a2e;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-brand: var(--brand-blue);
+  --color-brand-light: var(--brand-blue-light);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-body-detail: var(--body-detail);
+  --color-page: var(--page-bg);
+  --color-border-soft: var(--border);
+  --color-panel-1: var(--panel-1);
+  --color-panel-2: var(--panel-2);
+  --color-panel-3: var(--panel-3);
+  --color-divider: var(--divider);
+
+  --font-heading: var(--font-fredoka);
+  --font-body: var(--font-nunito);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--page-bg);
+  color: var(--ink);
+  font-family: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Thin, soft scrollbars inside list panels */
+.hw-scroll::-webkit-scrollbar { width: 10px; }
+.hw-scroll::-webkit-scrollbar-thumb {
+  background: #cddcec; border-radius: 999px; border: 3px solid transparent; background-clip: padding-box;
+}
+.hw-scroll::-webkit-scrollbar-track { background: transparent; }

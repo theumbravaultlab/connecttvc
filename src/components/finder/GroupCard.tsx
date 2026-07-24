@@ -1,0 +1,144 @@
+"use client";
+
+import { forwardRef } from "react";
+import type { Group } from "@/lib/types";
+import { DAY_LONG } from "@/lib/types";
+import { lifeColors } from "@/lib/colors";
+import { LifeTag, SpotsPill } from "@/components/ui";
+import { ClockIcon, LockIcon, PinIcon, StarIcon } from "@/components/icons";
+
+function InfoRow({
+  color,
+  label,
+  value,
+}: {
+  color: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <span
+        className="mt-[5px] h-2 w-2 shrink-0 rounded-full"
+        style={{ background: color }}
+      />
+      <span className="text-[13px] text-[#4a6076]">
+        <span className="font-bold text-[#16324f]">{label}</span> · {value}
+      </span>
+    </div>
+  );
+}
+
+export const GroupCard = forwardRef<
+  HTMLDivElement,
+  {
+    group: Group;
+    index: number;
+    selected: boolean;
+    greatFit: boolean;
+    matchName?: string;
+    onSelect: () => void;
+  }
+>(function GroupCard(
+  { group, selected, greatFit, matchName, onSelect },
+  ref,
+) {
+  const c = lifeColors(group.life);
+  const dayLong = DAY_LONG[group.day] ?? group.day;
+  const goodToKnow = group.childcare
+    ? "Childcare available on site"
+    : group.topic || "All are welcome";
+
+  return (
+    <div
+      ref={ref}
+      onClick={onSelect}
+      className="cursor-pointer overflow-hidden rounded-2xl bg-white transition-shadow"
+      style={{
+        background: selected ? "var(--card-selected)" : "#fff",
+        boxShadow: selected
+          ? "0 0 0 2px #088df9, 0 8px 20px rgba(8,141,249,.16)"
+          : "0 1px 2px rgba(22,50,79,.05)",
+      }}
+    >
+      {greatFit && matchName && (
+        <div className="flex items-center gap-1.5 bg-[oklch(0.95_0.06_150)] px-4 py-1.5 text-[11px] font-extrabold text-[oklch(0.44_0.13_150)]">
+          <StarIcon width={12} height={12} />
+          Great match for {matchName}
+        </div>
+      )}
+      <div className="flex">
+        <div className="w-1.5 shrink-0" style={{ background: c.solid }} />
+        <div className="flex-1 px-4 py-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-[family-name:var(--font-fredoka)] text-[16px] font-semibold text-[#16324f]">
+              {group.name}
+            </h3>
+            <SpotsPill members={group.members} capacity={group.capacity} />
+          </div>
+
+          <div className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-[#5b7a97]">
+            <ClockIcon width={14} height={14} />
+            {dayLong}s · {group.time}
+          </div>
+
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#5b7a97]">
+              <PinIcon width={14} height={14} />
+              {group.area}
+            </span>
+            <LifeTag life={group.life} />
+          </div>
+
+          <div className="mt-1 text-[12px] font-semibold text-[#8aa0b4]">
+            Hosted by {group.host}
+          </div>
+
+          {selected && (
+            <div className="mt-3 flex flex-col gap-2.5 border-t border-[#e6eef6] pt-3">
+              <p className="text-[13px] leading-[1.55] text-[#4a6076]">
+                {group.desc}
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <InfoRow
+                  color={c.solid}
+                  label="Group size"
+                  value={`Up to ${group.capacity}`}
+                />
+                <InfoRow
+                  color={c.solid}
+                  label="Format"
+                  value={`${group.format} · ${group.freq}`}
+                />
+                <InfoRow color={c.solid} label="Good to know" value={goodToKnow} />
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-[#f2f8ff] px-3 py-2.5 text-[12px] font-semibold text-[#5b7a97]">
+                <LockIcon width={15} height={15} className="shrink-0" />
+                {group.address
+                  ? `Meets at ${group.address}`
+                  : `Meets at a home in ${group.area}`}
+                <span className="ml-auto shrink-0 rounded-full bg-white px-1.5 py-[1px] text-[9.5px] font-bold text-[#8aa0b4]">
+                  Private
+                </span>
+              </div>
+              <div className="flex gap-2 pt-0.5">
+                <button
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 rounded-full bg-[#088df9] px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#0b7fe0]"
+                >
+                  Request to join
+                </button>
+                <button
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded-full border border-[#a3cbfc] px-4 py-2.5 text-[13px] font-bold text-[#088df9] transition-colors hover:bg-[#f2f8ff]"
+                >
+                  Message host
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
