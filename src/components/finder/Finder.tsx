@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  AREAS,
   DAY_LONG,
   LIFE_STAGES,
   initialsOf,
@@ -10,12 +9,13 @@ import {
   type Group,
   type Person,
 } from "@/lib/types";
-import { Avatar } from "@/components/ui";
+import { Avatar, StatusPill } from "@/components/ui";
 import { SearchIcon, XIcon } from "@/components/icons";
 import { getTravelTimesToGroups } from "@/app/actions";
 import type { TravelTime } from "@/lib/routes";
 import { FinderMap } from "./FinderMap";
 import { GroupCard } from "./GroupCard";
+import { PersonSearch } from "./PersonSearch";
 
 const DAY_FILTERS: (DayShort | "All")[] = ["All", "Mon", "Tue", "Wed", "Thu", "Sun"];
 
@@ -40,6 +40,13 @@ export function Finder({
   const lifeId = useId();
 
   const person = people.find((p) => p.id === personId) ?? null;
+
+  // Area is auto-derived from each address's city (no fixed list anymore),
+  // so the filter's options come from whatever areas actually show up.
+  const areaOptions = useMemo(
+    () => [...new Set(groups.map((g) => g.area).filter(Boolean))].sort(),
+    [groups],
+  );
 
   // Derived filtered list.
   const filtered = useMemo(() => {
@@ -153,22 +160,16 @@ export function Finder({
                 >
                   Finding for
                 </label>
-                <select
+                <PersonSearch
                   id={findingForId}
-                  value={personId}
-                  onChange={(e) => {
-                    setPersonId(e.target.value);
+                  people={people}
+                  selected={person}
+                  onSelect={(id) => {
+                    setPersonId(id);
                     setSelectedId(null);
                   }}
-                  className="w-full rounded-[9px] border-[1.5px] border-[#a3cbfc] bg-white px-3 py-2 text-[12.5px] font-bold text-[#088df9] outline-none"
-                >
-                  <option value="">Everyone (browse all)</option>
-                  {people.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  onClear={clearPerson}
+                />
               </div>
             )}
 
@@ -178,8 +179,9 @@ export function Finder({
                   <div className="flex items-center gap-2.5">
                     <Avatar initials={initialsOf(person.name)} size={34} />
                     <div>
-                      <div className="text-[13px] font-bold text-[#16324f]">
+                      <div className="flex items-center gap-1.5 text-[13px] font-bold text-[#16324f]">
                         {person.name}
+                        <StatusPill status={person.status} />
                       </div>
                       <div className="text-[11.5px] font-semibold text-[#5b7a97]">
                         {person.notes.split(",")[0]} · lives in {person.area}
@@ -250,7 +252,7 @@ export function Finder({
                     className="w-1/2 rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-2.5 py-2 text-[12px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"
                   >
                     <option value="All">All areas</option>
-                    {AREAS.map((a) => (
+                    {areaOptions.map((a) => (
                       <option key={a}>{a}</option>
                     ))}
                   </select>

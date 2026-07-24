@@ -193,6 +193,27 @@ export function TextArea(
   return <textarea {...props} className={`${controlClass} min-h-[70px] resize-y`} />;
 }
 
+/** Non-interactive display for a value that's auto-derived rather than
+ * hand-entered (e.g. area, derived from the address's city). */
+export function ReadOnlyValue({
+  value,
+  placeholder,
+  id,
+}: {
+  value: string;
+  placeholder?: string;
+  id?: string;
+}) {
+  return (
+    <div
+      id={id}
+      className="flex w-full items-center rounded-[9px] border border-[#dbe7f3] bg-[#eef3f8] px-3 py-2 text-[12.5px] font-semibold text-[#5b7a97]"
+    >
+      {value || <span className="text-[#8aa0b4]">{placeholder}</span>}
+    </div>
+  );
+}
+
 export function SelectInput({
   children,
   ...props

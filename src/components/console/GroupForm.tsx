@@ -1,9 +1,10 @@
 "use client";
 
-import { AREAS, DAYS, LIFE_STAGES, type Group } from "@/lib/types";
+import { DAYS, LIFE_STAGES, type Group } from "@/lib/types";
 import {
   CapacityBar,
   FieldLabel,
+  ReadOnlyValue,
   SelectInput,
   StatusPill,
   TextArea,
@@ -109,16 +110,6 @@ export function GroupForm({
             ))}
           </SelectInput>
         </Field>
-        <Field label="Area">
-          <SelectInput
-            value={group.area}
-            onChange={(e) => onPatch({ area: e.target.value })}
-          >
-            {AREAS.map((a) => (
-              <option key={a}>{a}</option>
-            ))}
-          </SelectInput>
-        </Field>
         <Field label="Meeting since">
           <TextInput
             value={group.startDate}
@@ -129,8 +120,12 @@ export function GroupForm({
           <AddressAutocomplete
             value={group.address}
             onChange={(address) => onPatch({ address })}
+            onPlaceSelected={({ city }) => city && onPatch({ area: city })}
             placeholder="Start typing an address…"
           />
+        </Field>
+        <Field label="Area">
+          <ReadOnlyValue value={group.area} placeholder="From address" />
         </Field>
       </div>
 

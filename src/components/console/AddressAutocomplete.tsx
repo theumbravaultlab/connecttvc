@@ -6,6 +6,18 @@ import { useMapsLibrary } from "@vis.gl/react-google-maps";
 interface Suggestion {
   placeId: string;
   text: string;
+  prediction: google.maps.places.PlacePrediction;
+}
+
+function extractCity(components: google.maps.places.AddressComponent[] | undefined): string | null {
+  const byType = (type: string) =>
+    components?.find((c) => c.types.includes(type))?.longText ?? null;
+  return (
+    byType("locality") ??
+    byType("sublocality") ??
+    byType("administrative_area_level_3") ??
+    null
+  );
 }
 
 const controlClass =
@@ -24,11 +36,15 @@ export function AddressAutocomplete({
   id,
   value,
   onChange,
+  onPlaceSelected,
   placeholder,
 }: {
   id?: string;
   value: string;
   onChange: (address: string) => void;
+  /** Fired after the user picks a suggestion, once the city is resolved —
+   * used to auto-populate the area field instead of a manual dropdown. */
+  onPlaceSelected?: (info: { address: string; city: string | null }) => void;
   placeholder?: string;
 }) {
   const placesLib = useMapsLibrary("places");
@@ -70,6 +86,7 @@ export function AddressAutocomplete({
             .map((s) => ({
               placeId: s.placePrediction!.placeId,
               text: s.placePrediction!.text.text,
+              prediction: s.placePrediction!,
             })),
         );
         setOpen(true);
@@ -98,6 +115,20 @@ export function AddressAutocomplete({
     setSuggestions([]);
     setOpen(false);
     sessionTokenRef.current = null; // a selection ends the billing session
+
+    if (onPlaceSelected) {
+      s.prediction
+        .toPlace()
+        .fetchFields({ fields: ["addressComponents"] })
+        .then(({ place }) => {
+          onPlaceSelected({ address: s.text, city: extractCity(place.addressComponents) });
+        })
+        .catch(() => {
+          // City lookup failed — address text is already set; area just
+          // won't auto-populate from this selection (saving will still
+          // re-derive it server-side).
+        });
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {

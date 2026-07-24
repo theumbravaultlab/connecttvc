@@ -2,18 +2,21 @@
 
 import { redirect } from "next/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { geocodeAddress } from "@/lib/geocode";
+import { geocodeAddress, type GeoResult } from "@/lib/geocode";
 import { getTravelTimes, type TravelTime } from "@/lib/routes";
 import type { Group, Person } from "@/lib/types";
 
-// Map domain records back to DB rows (camelCase -> snake_case).
-function groupToRow(g: Group, geo?: { lat: number; lng: number } | null) {
+// Map domain records back to DB rows (camelCase -> snake_case). `geo` (when
+// present) overrides area/lat/lng with freshly-geocoded values — area is
+// auto-derived from the address's city, never hand-picked, so a fresh
+// geocode is always authoritative over whatever was already on the record.
+function groupToRow(g: Group, geo?: GeoResult | null) {
   return {
     id: g.id,
     name: g.name,
     day: g.day,
     time: g.time,
-    area: g.area,
+    area: geo?.city ?? g.area,
     host: g.host,
     co_host: g.coHost,
     life: g.life,
@@ -36,13 +39,13 @@ function groupToRow(g: Group, geo?: { lat: number; lng: number } | null) {
   };
 }
 
-function personToRow(p: Person, geo?: { lat: number; lng: number } | null) {
+function personToRow(p: Person, geo?: GeoResult | null) {
   return {
     id: p.id,
     name: p.name,
     email: p.email,
     phone: p.phone,
-    area: p.area,
+    area: geo?.city ?? p.area,
     address: p.address,
     days: p.days,
     time_pref: p.timePref,
@@ -115,7 +118,7 @@ export async function backfillGroupLocations(): Promise<
     if (!geo) continue;
     const { error } = await supabase
       .from("groups")
-      .update({ lat: geo.lat, lng: geo.lng })
+      .update({ lat: geo.lat, lng: geo.lng, area: geo.city ?? undefined })
       .eq("id", row.id);
     if (!error) updated += 1;
   }
@@ -159,7 +162,7 @@ export async function backfillPersonLocations(): Promise<
     if (!geo) continue;
     const { error } = await supabase
       .from("people")
-      .update({ lat: geo.lat, lng: geo.lng })
+      .update({ lat: geo.lat, lng: geo.lng, area: geo.city ?? undefined })
       .eq("id", row.id);
     if (!error) updated += 1;
   }

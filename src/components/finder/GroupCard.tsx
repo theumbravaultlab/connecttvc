@@ -131,20 +131,6 @@ export const GroupCard = forwardRef<
                   Private
                 </span>
               </div>
-              <div className="flex gap-2 pt-0.5">
-                <button
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex-1 rounded-full bg-[#088df9] px-4 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#0b7fe0]"
-                >
-                  Request to join
-                </button>
-                <button
-                  onClick={(e) => e.stopPropagation()}
-                  className="rounded-full border border-[#a3cbfc] px-4 py-2.5 text-[13px] font-bold text-[#088df9] transition-colors hover:bg-[#f2f8ff]"
-                >
-                  Message host
-                </button>
-              </div>
             </div>
           )}
         </div>

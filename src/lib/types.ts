@@ -28,14 +28,10 @@ export type TimePref = "Mornings" | "Afternoons" | "Evenings" | "Flexible";
 export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export type DayShort = (typeof DAYS)[number];
 
-export const AREAS = [
-  "Eastside",
-  "Downtown",
-  "North Hills",
-  "Westgate",
-  "Midtown",
-] as const;
-export type Area = (typeof AREAS)[number];
+// Area is no longer a fixed set — it's auto-derived from the city in each
+// record's geocoded address (see src/lib/geocode.ts), so Group.area /
+// Person.area are just plain strings now. The Finder's area filter builds
+// its option list dynamically from whatever areas are actually present.
 
 export const LIFE_STAGES: LifeStage[] = [
   "Families",

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AREAS,
   LIFE_STAGES,
   PERSON_STATUSES,
   initialsOf,
@@ -12,6 +11,7 @@ import {
 import {
   Avatar,
   DayPills,
+  ReadOnlyValue,
   SelectInput,
   StatusPill,
   TextArea,
@@ -84,16 +84,6 @@ export function PersonForm({
 
       <SectionHeading>Location &amp; availability</SectionHeading>
       <div className="flex flex-wrap gap-3">
-        <Field label="Home area">
-          <SelectInput
-            value={person.area}
-            onChange={(e) => onPatch({ area: e.target.value })}
-          >
-            {AREAS.map((a) => (
-              <option key={a}>{a}</option>
-            ))}
-          </SelectInput>
-        </Field>
         <Field label="Time preference">
           <SelectInput
             value={person.timePref}
@@ -115,8 +105,12 @@ export function PersonForm({
           <AddressAutocomplete
             value={person.address}
             onChange={(address) => onPatch({ address })}
+            onPlaceSelected={({ city }) => city && onPatch({ area: city })}
             placeholder="Start typing an address…"
           />
+        </Field>
+        <Field label="Home area">
+          <ReadOnlyValue value={person.area} placeholder="From address" />
         </Field>
       </div>
 
