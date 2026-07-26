@@ -53,6 +53,19 @@ export function statusSolid(status: GroupStatus | PersonStatus): string {
   return `oklch(0.62 0.15 ${h})`;
 }
 
+/** Map-pin fill for a group: life-stage color while it's actually
+ * actionable (New/Open), a flat muted gray once it's Closed. This keeps
+ * full 5-color life-stage differentiation exactly where it matters (the
+ * groups worth comparing while scanning the map) while a closed group
+ * recedes into "skip this one" without needing to click in to find out —
+ * deliberately not status-colored across all three statuses, since with
+ * most groups landing on "Open" that collapses the map to one dominant
+ * hue and makes individual pins harder to tell apart, not easier. */
+export function groupPinColor(group: { life: LifeStage; status: GroupStatus }): string {
+  if (group.status === "Closed") return "oklch(0.65 0.02 250)";
+  return lifeColors(group.life).solid;
+}
+
 /** Capacity bar fill: blue < 80%, amber 80–99%, red at 100%. */
 export function capacityFill(members: number, capacity: number): string {
   const pct = capacity > 0 ? members / capacity : 0;

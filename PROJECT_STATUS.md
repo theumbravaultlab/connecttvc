@@ -1080,6 +1080,49 @@ anywhere in the codebase (a historical mention in this doc's earlier
 *then*, not touched). Re-verified `tsc`/`eslint`/build clean after this fix
 specifically, not just as part of the batch above.
 
+## Map pin color + label update (life-stage-or-gray, surname-based shorthand)
+
+Two changes to `FinderMap.tsx`, the second iterating on the first after
+discussing the tradeoff directly with the user:
+
+**Group pins: life-stage color while actionable, flat gray once Closed.**
+First pass tried pure status-coloring (New/Open/Closed) to match the rest
+of the app — but flagged to the user that with most groups landing on
+"Open," that collapses the map to one dominant hue and makes individual
+pins *harder* to tell apart while scanning, the opposite of the goal.
+Landed instead on a split, new `groupPinColor()` in `colors.ts`: life-stage
+color (the original 5-hue scheme) for New/Open groups — full
+differentiation exactly where it's useful, i.e. the groups actually worth
+comparing — and a flat, low-chroma gray (`oklch(0.65 0.02 250)`,
+deliberately near-neutral so it reads as "muted" against every vivid
+life-stage hue) for Closed groups, so the ones you can't place anyone in
+recede at a glance without needing to click in. `GroupCard.tsx`'s own
+life-stage stripe (a different, list-side component) untouched throughout.
+
+**Person pins stay status-colored** (the "Finding for" `PersonPin` and the
+"Show people" roster pins) — a deliberately different call than groups:
+you're never looking at hundreds of person pins simultaneously needing
+type-differentiation the way you are with groups, and "who in this roster
+still needs placement" is genuinely the most useful thing status-color
+can tell you there. `PersonPin` still reads as visually distinct from a
+roster pin via its larger size, pulsing halo, and top z-index, not a
+fixed color.
+
+**Group pin shorthand now strips "The " and uses the surname's first two
+letters.** Most groups are named "The `<Surname>`" as of
+`009_couple_host_naming.sql` — the existing `initialsOf()` scheme (first
+letter of first word + first letter of last word) collapsed almost all of
+them to `"T"` + one letter, a 26-way collision across the whole dataset
+(e.g. "The Bennetts" and "The Boyds" would've looked identical-ish at a
+glance). New `groupPinLabel()` strips a leading "The " and uses the first
+two letters of the last remaining word instead ("The Bennetts" → "BE",
+"The Boyds" → "BO" — uppercased for visual consistency with every other
+pin label, not mixed-case). Falls back to the ordinary `initialsOf()`
+scheme for any group not using the "The X" convention.
+
+Verified: `tsc`/`eslint` clean (0 problems), full production build
+succeeds. Not yet visually confirmed live — same standing constraint.
+
 ## What's built and verified working
 
 Everything below has been either live-tested through the actual UI/browser,

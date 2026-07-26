@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { AdvancedMarker, ColorScheme, Map as GoogleMap, useMap } from "@vis.gl/react-google-maps";
 import { initialsOf, type Group, type Person } from "@/lib/types";
-import { lifeColors, statusSolid } from "@/lib/colors";
+import { groupPinColor, statusSolid } from "@/lib/colors";
 import { UsersIcon } from "@/components/icons";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -36,6 +36,25 @@ function hasLocation(g: Group): g is LocatedGroup {
 function personLocation(p: Person | null | undefined): LatLng | null {
   if (!p || typeof p.lat !== "number" || typeof p.lng !== "number") return null;
   return { lat: p.lat, lng: p.lng };
+}
+
+/** Short 2-letter pin label for a group. Most groups are now named
+ * "The <Surname>" (see 009_couple_host_naming.sql) — the ordinary
+ * initials scheme (first letter of first word + first letter of last
+ * word) collapses almost all of these to "T" + one letter, since "The"
+ * is always the first word — a 26-way collision across the whole
+ * dataset. Stripping "The " and using the first two letters of the
+ * actual surname instead gives a far more distinctive, recognizable
+ * shorthand. Falls back to the ordinary initials scheme for any group
+ * not using that naming convention. */
+function groupPinLabel(name: string): string {
+  const trimmed = name.trim();
+  const stripped = trimmed.replace(/^the\s+/i, "");
+  if (stripped !== trimmed) {
+    const lastWord = stripped.split(/\s+/).filter(Boolean).pop() ?? "";
+    return (lastWord.slice(0, 2) || "?").toUpperCase();
+  }
+  return initialsOf(name);
 }
 
 // A pin to be rendered, tagged so jittered positions can be routed back to
@@ -279,7 +298,10 @@ function GroupPin({
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
-  const c = lifeColors(group.life);
+  // Life-stage color while the group is actually actionable, a flat gray
+  // once it's Closed — see groupPinColor()'s own comment for why this
+  // reads better than coloring all three statuses (mostly "Open") would.
+  const color = groupPinColor(group);
 
   return (
     <AdvancedMarker
@@ -292,13 +314,13 @@ function GroupPin({
         {selected && (
           <span
             className="hw-pulse-ring"
-            style={{ width: 34, height: 34, background: c.solid, opacity: 0.55 }}
+            style={{ width: 34, height: 34, background: color, opacity: 0.55 }}
           />
         )}
         <span
           className="relative flex h-[30px] w-[30px] items-center justify-center transition-transform duration-150"
           style={{
-            background: c.solid,
+            background: color,
             borderRadius: "50% 50% 50% 0",
             transform: `rotate(-45deg) scale(${selected ? 1.32 : 1})`,
             boxShadow: selected
@@ -310,7 +332,7 @@ function GroupPin({
             className="text-[11px] font-extrabold text-white"
             style={{ transform: "rotate(45deg)" }}
           >
-            {initialsOf(group.name)}
+            {groupPinLabel(group.name)}
           </span>
         </span>
       </div>
@@ -319,30 +341,33 @@ function GroupPin({
 }
 
 /** Distinct "you are here"-style pin for the person "Finding for" is set
- * to — a person silhouette (head + shoulders) in brand blue with the
- * person's initials in the head, so it never reads as just another group
- * teardrop or one of the status-colored roster pins below. */
+ * to — a person silhouette (head + shoulders), colored by their own
+ * status (same as the roster pins below) rather than always blue, with
+ * the person's initials in the head. Still reads as distinct from a
+ * group teardrop or a roster pin via its larger size, pulsing halo, and
+ * top z-index, not via a fixed color anymore. */
 function PersonPin({ position, person }: { position: LatLng; person: Person }) {
+  const color = statusSolid(person.status);
   return (
     <AdvancedMarker position={position} zIndex={40} title={person.name}>
       <div className="relative flex h-[52px] w-[46px] items-center justify-center">
         <span
           className="hw-pulse-ring"
-          style={{ width: 38, height: 38, background: "var(--brand-blue)", opacity: 0.5 }}
+          style={{ width: 38, height: 38, background: color, opacity: 0.5 }}
         />
         <div
           className="relative"
-          style={{ filter: "drop-shadow(0 3px 8px rgba(8,141,249,.5))" }}
+          style={{ filter: "drop-shadow(0 3px 8px rgba(22,50,79,.5))" }}
         >
           <svg width="36" height="42" viewBox="0 0 32 38" fill="none">
             <path
               d="M4 37c0-13 6-14 12-14s12 1 12 14z"
-              fill="var(--brand-blue)"
+              fill={color}
               stroke="#fff"
               strokeWidth="2.5"
               strokeLinejoin="round"
             />
-            <circle cx="16" cy="12" r="10.5" fill="var(--brand-blue)" stroke="#fff" strokeWidth="2.5" />
+            <circle cx="16" cy="12" r="10.5" fill={color} stroke="#fff" strokeWidth="2.5" />
             <text
               x="16"
               y="15.5"
