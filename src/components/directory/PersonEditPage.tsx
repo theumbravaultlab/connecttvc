@@ -54,8 +54,17 @@ export function PersonEditPage({ id }: { id: string }) {
         setSaveError(null);
         // Refresh the local baseline so a second save later in this same
         // session compares against the row's actual latest updated_at,
-        // not the stale value loaded when the page first opened.
-        if (result.updatedAt) patchPerson({ updatedAt: result.updatedAt });
+        // not the stale value loaded when the page first opened. Also
+        // pick up the geocoded area/lat/lng — without this, a newly
+        // placed person wouldn't show on the Map until a full page
+        // reload re-fetched them, even though the DB row was already
+        // correct the moment the save succeeded.
+        patchPerson({
+          updatedAt: result.updatedAt,
+          area: result.area,
+          lat: result.lat,
+          lng: result.lng,
+        });
         setTimeout(() => setSaveState("idle"), 1500);
       } else {
         setSaveState("error");

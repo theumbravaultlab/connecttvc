@@ -68,7 +68,19 @@ function personToRow(p: Person, geo?: GeoResult | null) {
   };
 }
 
-type ActionResult = { ok: boolean; error?: string; persisted: boolean; updatedAt?: string };
+type ActionResult = {
+  ok: boolean;
+  error?: string;
+  persisted: boolean;
+  updatedAt?: string;
+  // Populated by saveGroup/savePerson on success — the geocoded (or
+  // carried-forward) area/lat/lng actually written to the row, so the
+  // caller can patch its own in-memory copy immediately instead of only
+  // finding out on the next full page load.
+  area?: string;
+  lat?: number | null;
+  lng?: number | null;
+};
 
 // Named for what it actually checks: is there a valid signed-in session.
 // The real leader/admin role gate is RLS (`is_leader()` in schema.sql), on
@@ -131,13 +143,21 @@ export async function saveGroup(group: Group): Promise<ActionResult> {
       ? await geocodeAddress(group.address)
       : null;
 
+  const row = groupToRow(group, geo);
   const { data, error } = await supabase
     .from("groups")
-    .upsert(groupToRow(group, geo))
+    .upsert(row)
     .select("updated_at")
     .single();
   if (error) return { ok: false, error: error.message, persisted: true };
-  return { ok: true, persisted: true, updatedAt: data?.updated_at };
+  return {
+    ok: true,
+    persisted: true,
+    updatedAt: data?.updated_at,
+    area: row.area,
+    lat: row.lat,
+    lng: row.lng,
+  };
 }
 
 export async function savePerson(person: Person): Promise<ActionResult> {
@@ -154,13 +174,21 @@ export async function savePerson(person: Person): Promise<ActionResult> {
       ? await geocodeAddress(person.address)
       : null;
 
+  const row = personToRow(person, geo);
   const { data, error } = await supabase
     .from("people")
-    .upsert(personToRow(person, geo))
+    .upsert(row)
     .select("updated_at")
     .single();
   if (error) return { ok: false, error: error.message, persisted: true };
-  return { ok: true, persisted: true, updatedAt: data?.updated_at };
+  return {
+    ok: true,
+    persisted: true,
+    updatedAt: data?.updated_at,
+    area: row.area,
+    lat: row.lat,
+    lng: row.lng,
+  };
 }
 
 type GeoUpdate = { id: string; lat: number; lng: number; area?: string };

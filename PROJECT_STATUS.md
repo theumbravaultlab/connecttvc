@@ -1123,6 +1123,49 @@ scheme for any group not using the "The X" convention.
 Verified: `tsc`/`eslint` clean (0 problems), full production build
 succeeds. Not yet visually confirmed live — same standing constraint.
 
+## Hotfix: new/edited records weren't showing on the Map until a reload
+
+User report: added a new Home Group (and separately a Person) with a real
+address, and neither one appeared on the Map. Root cause found in
+`actions.ts`, not a geocoding failure: `saveGroup`/`savePerson` correctly
+geocode the address and write the resulting `area`/`lat`/`lng` to the
+database — but only ever returned `updated_at` back to the caller. The
+*database* row was right the whole time; the *page you were looking at*
+never found out, since the Map reads from the shared in-memory
+`DirectoryData` copy, which still held the old (empty) location until a
+full reload re-fetched from the server.
+
+Fixed by having both actions return the `area`/`lat`/`lng` they actually
+wrote (reusing the row object already built for the upsert — no extra
+DB round-trip), and having `GroupEditPage.tsx`/`PersonEditPage.tsx` patch
+all three into shared state on success, the same way they already did for
+`updatedAt`. A newly geocoded record now shows on the Map immediately
+after saving, no reload needed.
+
+Separately, this session also turned up two real Supabase gotchas worth
+remembering for next time something "isn't found" that should exist:
+- **A column added via a manual `ALTER TABLE`/table-editor edit doesn't
+  always show up to the app right away** — PostgREST (the auto-generated
+  REST API layer) caches the schema and can lag behind a direct DDL
+  change. Fix: `NOTIFY pgrst, 'reload schema';` in the SQL Editor.
+  `placement_details` hit exactly this ("Could not find the
+  'placement_details' column... in the schema cache") — though in that
+  specific case the real issue was simpler: `004_group_placement_details.sql`
+  had never actually been run at all, so the column was genuinely missing,
+  not just stale-cached. Confirmed now added and working.
+- **`description` and `placement_details` are two separate, deliberately
+  distinct columns**, not one renamed into the other — worth restating
+  here since it came up as a real point of confusion. `description` is
+  the group's public-facing blurb (`Group.desc`); `placement_details` is
+  the separate practical-logistics field added later this session
+  (`Group.placementDetails`, shown on the Finder card). Renaming one into
+  the other would break whichever one got renamed away.
+
+Verified: `tsc`/`eslint` clean (0 problems), full production build
+succeeds. Not yet click-tested live with a real save — same standing
+constraint — but the root cause (a plain missing return value) is
+unambiguous, not a guess.
+
 ## What's built and verified working
 
 Everything below has been either live-tested through the actual UI/browser,
