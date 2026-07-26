@@ -1,7 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { DAYS, GROUP_STATUSES, LIFE_STAGES, initialsOf, type Group, type Person } from "@/lib/types";
+import {
+  DAYS,
+  GROUP_STATUSES,
+  LIFE_STAGES,
+  displayName,
+  initialsOf,
+  type Group,
+  type Person,
+} from "@/lib/types";
 import {
   Avatar,
   CapacityBar,
@@ -253,9 +261,9 @@ export function GroupForm({
               onClick={() => router.push(`/directory/people/${p.id}`)}
               className="flex items-center gap-2.5 rounded-xl bg-[var(--panel-1)] px-3 py-2 text-left transition-colors hover:bg-[var(--panel-2)]"
             >
-              <Avatar initials={initialsOf(p.name)} size={26} tone="muted" />
+              <Avatar initials={initialsOf(displayName(p))} size={26} tone="muted" />
               <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-[var(--ink)]">
-                {p.name}
+                {displayName(p)}
               </span>
               <StatusPill status={p.status} />
             </button>

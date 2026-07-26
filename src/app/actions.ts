@@ -66,6 +66,7 @@ function personToRow(p: Person, geo?: GeoResult | null) {
     notes: p.notes,
     party_size: p.partySize,
     partner_name: p.partnerName,
+    party_name: p.partyName,
     lat: geo ? geo.lat : (p.lat ?? null),
     lng: geo ? geo.lng : (p.lng ?? null),
   };

@@ -57,6 +57,7 @@ function rowToPerson(r: any): Person {
     notes: r.notes ?? "",
     partySize: r.party_size ?? 1,
     partnerName: r.partner_name ?? "",
+    partyName: r.party_name ?? "",
     lat: r.lat,
     lng: r.lng,
     updatedAt: r.updated_at,

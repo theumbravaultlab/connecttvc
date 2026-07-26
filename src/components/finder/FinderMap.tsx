@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { AdvancedMarker, ColorScheme, Map as GoogleMap, useMap } from "@vis.gl/react-google-maps";
-import { initialsOf, type Group, type Person } from "@/lib/types";
+import { displayName, initialsOf, type Group, type Person } from "@/lib/types";
 import { groupPinColor, statusSolid } from "@/lib/colors";
 import { UsersIcon } from "@/components/icons";
 import { useTheme } from "@/components/ThemeProvider";
@@ -349,7 +349,7 @@ function GroupPin({
 function PersonPin({ position, person }: { position: LatLng; person: Person }) {
   const color = statusSolid(person.status);
   return (
-    <AdvancedMarker position={position} zIndex={40} title={person.name}>
+    <AdvancedMarker position={position} zIndex={40} title={displayName(person)}>
       <div className="relative flex h-[52px] w-[46px] items-center justify-center">
         <span
           className="hw-pulse-ring"
@@ -376,7 +376,7 @@ function PersonPin({ position, person }: { position: LatLng; person: Person }) {
               fontWeight="800"
               fill="#fff"
             >
-              {initialsOf(person.name)}
+              {initialsOf(displayName(person))}
             </text>
           </svg>
         </div>
@@ -392,7 +392,7 @@ function PersonPin({ position, person }: { position: LatLng; person: Person }) {
 function StatusPersonPin({ position, person }: { position: LatLng; person: Person }) {
   const color = statusSolid(person.status);
   return (
-    <AdvancedMarker position={position} zIndex={20} title={`${person.name} · ${person.status}`}>
+    <AdvancedMarker position={position} zIndex={20} title={`${displayName(person)} · ${person.status}`}>
       <div style={{ filter: "drop-shadow(0 2px 5px rgba(22,50,79,.32))" }}>
         <svg width="23" height="27" viewBox="0 0 32 38" fill="none">
           <path
@@ -411,7 +411,7 @@ function StatusPersonPin({ position, person }: { position: LatLng; person: Perso
             fontWeight="800"
             fill="#fff"
           >
-            {initialsOf(person.name)}
+            {initialsOf(displayName(person))}
           </text>
         </svg>
       </div>

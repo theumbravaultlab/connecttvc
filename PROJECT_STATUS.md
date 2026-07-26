@@ -417,24 +417,28 @@ supabase/
                                  does anything useful once 005 has actually run
   010_person_party_size.sql      — adds people.party_size (default 1) + people.partner_name, for
                                  couples/households searching together as one Person record;
-                                 NOT CONFIRMED RUN
+                                 CONFIRMED RUN
   011_contact_log.sql            — new contact_log table (append-only outreach history per
-                                 person, leader-only RLS); NOT CONFIRMED RUN
+                                 person, leader-only RLS); CONFIRMED RUN
+  012_person_party_name.sql      — adds people.party_name, the connected/searchable name for a
+                                 party of 2+ (e.g. "The Smiths"); NOT CONFIRMED RUN
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql
 ```
 
 **Current live/production status: schema.sql, seed.sql, 002, 003, 004,
-006, 007, and 008 are all confirmed run. `005_sample_data_dfw.sql` has
-deliberately never been run** — that's the explicit call the project owner
-made when going live (see "Product direction" and the go-live section
+006, 007, 008, 010, and 011 are all confirmed run. `005_sample_data_dfw.sql`
+has deliberately never been run** — that's the explicit call the project
+owner made when going live (see "Product direction" and the go-live section
 above): production only has the original ~5+5 seed.sql rows, not the
 320-group/600-person fake DFW dataset, and 005 stays unrun until real data
-or a deliberate decision to demo with sample data.
+or a deliberate decision to demo with sample data. `012_person_party_name.sql`
+is **not yet confirmed run** — run it before relying on the Party name
+field below.
 
 **This directly affects `009_couple_host_naming.sql`: its 320 `UPDATE ...
 WHERE id = 'gN'` statements target ids that only exist once 005 has been
@@ -1235,14 +1239,59 @@ granularity, couples/household structure):
      history below. Fetch errors (e.g. migration not yet run) surface as an
      inline banner instead of an infinite spinner.
 
-**Migrations 010 and 011 are NOT YET CONFIRMED RUN against production** —
-run them (in order, after 009) before relying on party size or the outreach
-log live; until then, `ContactLog` will show its fetch-error banner instead
-of a working log, and party size/partner name will silently read/write as
-defaults (1 / "") since the columns don't exist yet.
+Migrations 010 and 011 have since been confirmed run against production.
 
 Verified: `tsc`/`eslint` clean (0 problems), full production build
 succeeds. Not yet click-tested live — same standing constraint.
+
+## Party structure follow-up: a distinct "party name" for search
+
+Continued brainstorming with the project owner on couples/households
+searching together (task 7 from the batch above): with everything living on
+one master `Person` record, what should coordinators actually search for —
+an individual's name, or the connected pair? Landed on: the party gets its
+own explicit name, used as the primary search key and headline everywhere,
+while `name`/`partnerName` stay individual-level detail. Confirmed
+explicitly that matching itself should keep running off **one shared set of
+criteria** for the whole party (age, life stage, days, city, childcare) —
+not two individually-reconciled sets — which the existing architecture
+already gave for free.
+
+- **New `Person.partyName` field** (e.g. "The Smiths") — separate from
+  `name` (the primary individual) and `partnerName` (the other individual).
+  Migration: `supabase/012_person_party_name.sql`
+  (`people.party_name text default ''`). Threaded through `types.ts` →
+  `data.ts`'s `rowToPerson` → `actions.ts`'s `personToRow` → a new "Party
+  name" field (full-width, tag "What shows up in search for a party of 2+")
+  in `PersonForm.tsx`'s Household section.
+- **Two new helpers in `types.ts`**: `displayName(person)` — returns
+  `partyName` when `partySize > 1` and it's set, otherwise falls back to
+  `name` — is now what's headlined and searched everywhere a person summary
+  appears; `partyDetail(person)` — returns `"John Smith & Sarah Smith"` for
+  a party of 2+ (null for a solo record) so the actual individuals are
+  still visible right under the (possibly non-individual) display name.
+- **Updated to use `displayName`/`partyDetail`** instead of raw `person.name`:
+  `PersonForm.tsx` (header + avatar initials), `PersonTable.tsx` (name cell
+  + a new subline showing `partyDetail`), `PersonSearch.tsx` (matching,
+  sorting, the selected chip, and dropdown rows — search now also matches
+  against `partnerName`), `Finder.tsx`'s "Finding for" summary card (adds a
+  bold `partyDetail` line so it's unambiguous this is a party of 2 and who
+  they are), `GroupForm.tsx`'s assigned-people roster, and `FinderMap.tsx`'s
+  person-pin initials/title/tooltip (both the "Finding for" pin and the
+  smaller status pins shown via "Show people").
+- **`PeopleListPage.tsx`'s directory search** now matches against
+  `displayName`, `name`, and `partnerName` together, so searching either
+  "Smith" or "The Smiths" finds the same party record.
+
+`012_person_party_name.sql` is **not yet confirmed run** — until it is,
+`partyName` reads/writes as `""` and every display falls back to `name`,
+same as before this round (no broken state, just no party name yet).
+
+Verified: `tsc`/`eslint` clean (0 problems), full production build
+succeeds. Not click-tested live — the app requires a real coordinator login
+(no seed/demo fallback since Supabase is configured), so this round's UI
+changes were verified by code review + the build pipeline only, same
+standing constraint as every other round.
 
 ## What's built and verified working
 

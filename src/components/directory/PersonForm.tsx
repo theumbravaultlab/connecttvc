@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   LIFE_STAGES,
   PERSON_STATUSES,
+  displayName,
   initialsOf,
+  partyDetail,
   type DayShort,
   type Group,
   type Person,
@@ -47,12 +49,13 @@ export function PersonForm({
     <div>
       {/* form header */}
       <div className="mb-4 flex items-center gap-3">
-        <Avatar initials={initialsOf(person.name)} size={40} />
+        <Avatar initials={initialsOf(displayName(person))} size={40} />
         <div>
           <h2 className="font-[family-name:var(--font-fredoka)] text-[21px] font-semibold text-[var(--ink)]">
-            {person.name || "New member"}
+            {displayName(person) || "New member"}
           </h2>
           <p className="text-[12px] font-semibold text-[var(--faint)]">
+            {partyDetail(person) ? `${partyDetail(person)} · ` : ""}
             Group · {groupName}
           </p>
         </div>
@@ -99,6 +102,17 @@ export function PersonForm({
             value={person.partnerName}
             placeholder="e.g. Sarah Smith"
             onChange={(e) => onPatch({ partnerName: e.target.value })}
+          />
+        </Field>
+        <Field
+          full
+          label="Party name"
+          tag="What shows up in search for a party of 2+"
+        >
+          <TextInput
+            value={person.partyName}
+            placeholder="e.g. The Smiths"
+            onChange={(e) => onPatch({ partyName: e.target.value })}
           />
         </Field>
       </div>

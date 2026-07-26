@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PERSON_STATUSES, type Person, type PersonStatus } from "@/lib/types";
+import { PERSON_STATUSES, displayName, type Person, type PersonStatus } from "@/lib/types";
 import { backfillPersonLocations } from "@/app/actions";
 import { PlusIcon } from "@/components/icons";
 import { useDirectoryData } from "./DirectoryData";
@@ -14,7 +14,7 @@ const blankPerson = (id: string): Person => ({
   id, name: "New Member", email: "", phone: "", area: "", address: "",
   age: null, days: [], timePref: "Flexible", life: "Everyone", interests: "",
   childcareNeeded: false, accessibility: "—", status: "New", group: null,
-  joined: "", notes: "", partySize: 1, partnerName: "",
+  joined: "", notes: "", partySize: 1, partnerName: "", partyName: "",
 });
 
 export function PeopleListPage() {
@@ -80,7 +80,13 @@ export function PeopleListPage() {
       if (statusFilter !== "All" && p.status !== statusFilter) return false;
       if (lifeFilter !== "All" && p.life !== lifeFilter) return false;
       if (areaFilter !== "All" && p.area !== areaFilter) return false;
-      if (q && !`${p.name} ${p.area} ${p.email}`.toLowerCase().includes(q)) return false;
+      if (
+        q &&
+        !`${displayName(p)} ${p.name} ${p.partnerName} ${p.area} ${p.email}`
+          .toLowerCase()
+          .includes(q)
+      )
+        return false;
       return true;
     });
   }, [people, search, statusFilter, lifeFilter, areaFilter]);

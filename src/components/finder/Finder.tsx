@@ -6,7 +6,9 @@ import {
   DAY_LONG,
   GROUP_STATUSES,
   LIFE_STAGES,
+  displayName,
   initialsOf,
+  partyDetail,
   type DayShort,
   type Group,
   type GroupStatus,
@@ -399,12 +401,17 @@ export function Finder({
               <div className="rounded-xl border border-[var(--border-accent)] bg-[var(--panel-2)] p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <Avatar initials={initialsOf(person.name)} size={34} />
+                    <Avatar initials={initialsOf(displayName(person))} size={34} />
                     <div>
                       <div className="flex items-center gap-1.5 text-[13px] font-bold text-[var(--ink)]">
-                        {person.name}
+                        {displayName(person)}
                         <PartyTag partySize={person.partySize} />
                       </div>
+                      {partyDetail(person) && (
+                        <div className="text-[11.5px] font-bold text-[var(--brand-blue)]">
+                          {partyDetail(person)}
+                        </div>
+                      )}
                       <div className="text-[12px] font-semibold text-[var(--muted)]">
                         {person.notes.split(",")[0]} · lives in {person.area}
                       </div>

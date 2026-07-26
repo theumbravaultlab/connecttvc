@@ -101,9 +101,16 @@ export interface Person {
   // Person record rather than two — partySize is how many spots they
   // need, partnerName is a plain-text name for whoever they're searching
   // with. Deliberately not a second linked record: simpler, and matching
-  // only ever needs to be evaluated once per party, not once per person.
+  // (life stage, days, city, childcare, etc.) only ever needs to be
+  // evaluated once per party against one shared set of criteria, not
+  // reconciled between two individuals' possibly-different answers.
   partySize: number;
   partnerName: string;
+  // The connected/searchable name for a party of 2+ (e.g. "The Smiths") —
+  // deliberately separate from `name` (the primary individual) and
+  // `partnerName` (the other individual), since neither of those is
+  // necessarily what a coordinator thinks to search for. See displayName().
+  partyName: string;
   // Geo (populated by geocoding on save), same pattern as Group.
   lat?: number | null;
   lng?: number | null;
@@ -139,4 +146,21 @@ export function initialsOf(name: string): string {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+type PartyFields = Pick<Person, "name" | "partySize" | "partyName">;
+
+/** The name to search for and headline everywhere a person's summary
+ * appears — the connected party's name (e.g. "The Smiths") when this is a
+ * party of 2+ that has one set, otherwise just this person's own name. */
+export function displayName(p: PartyFields): string {
+  return p.partySize > 1 && p.partyName.trim() ? p.partyName.trim() : p.name;
+}
+
+/** "John Smith & Sarah Smith" for a party of 2+ with a partner name set,
+ * null for a solo record — so callers can show who's actually in the party
+ * right under the (possibly non-individual) display name above. */
+export function partyDetail(p: Pick<Person, "name" | "partnerName" | "partySize">): string | null {
+  if (p.partySize <= 1) return null;
+  return p.partnerName.trim() ? `${p.name} & ${p.partnerName.trim()}` : p.name;
 }

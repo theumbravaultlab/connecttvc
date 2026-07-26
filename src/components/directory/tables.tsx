@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import type { Group, Person } from "@/lib/types";
-import { initialsOf } from "@/lib/types";
+import { displayName, initialsOf, partyDetail } from "@/lib/types";
 import { Avatar, LifeTag, PartyTag, StatusPill } from "@/components/ui";
 import { SearchIcon } from "@/components/icons";
 
@@ -98,11 +98,20 @@ export function PersonTable({
           >
             <td className={td}>
               <span className="flex items-center gap-2">
-                <Avatar initials={initialsOf(p.name)} size={24} tone="muted" />
-                <span className="font-[family-name:var(--font-fredoka)] font-semibold">
-                  {p.name}
+                <Avatar initials={initialsOf(displayName(p))} size={24} tone="muted" />
+                <span className="flex flex-col">
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-[family-name:var(--font-fredoka)] font-semibold">
+                      {displayName(p)}
+                    </span>
+                    <PartyTag partySize={p.partySize} />
+                  </span>
+                  {partyDetail(p) && (
+                    <span className="text-[11px] font-semibold text-[var(--faint)]">
+                      {partyDetail(p)}
+                    </span>
+                  )}
                 </span>
-                <PartyTag partySize={p.partySize} />
               </span>
             </td>
             <td className={td}>{p.area || "—"}</td>

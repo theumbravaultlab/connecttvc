@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { PERSON_STATUSES, initialsOf, type Person, type PersonStatus } from "@/lib/types";
+import {
+  PERSON_STATUSES,
+  displayName,
+  initialsOf,
+  type Person,
+  type PersonStatus,
+} from "@/lib/types";
 import { Avatar, PartyTag, StatusPill } from "@/components/ui";
 import { SearchIcon, XIcon } from "@/components/icons";
 
@@ -47,8 +53,14 @@ export function PersonSearch({
     const q = query.trim().toLowerCase();
     return people
       .filter((p) => statusFilter === "All" || p.status === statusFilter)
-      .filter((p) => !q || p.name.toLowerCase().includes(q))
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .filter(
+        (p) =>
+          !q ||
+          displayName(p).toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q) ||
+          p.partnerName.toLowerCase().includes(q),
+      )
+      .sort((a, b) => displayName(a).localeCompare(displayName(b)))
       .slice(0, 50);
   }, [people, query, statusFilter]);
 
@@ -80,7 +92,7 @@ export function PersonSearch({
       <div className="flex items-center justify-between gap-2 rounded-[9px] border-[1.5px] border-[var(--brand-blue-light)] bg-[var(--surface)] py-1.5 pl-3 pr-1.5">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-[13px] font-bold text-[var(--brand-blue)]">
-            {selected.name}
+            {displayName(selected)}
           </span>
           <PartyTag partySize={selected.partySize} />
           <StatusPill status={selected.status} />
@@ -151,9 +163,9 @@ export function PersonSearch({
                     className="flex w-full items-center gap-2 px-3 py-2 text-left"
                     style={{ background: i === highlighted ? "var(--panel-2)" : "var(--surface)" }}
                   >
-                    <Avatar initials={initialsOf(p.name)} size={22} tone="muted" />
+                    <Avatar initials={initialsOf(displayName(p))} size={22} tone="muted" />
                     <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--ink)]">
-                      {p.name}
+                      {displayName(p)}
                     </span>
                     <PartyTag partySize={p.partySize} />
                     <StatusPill status={p.status} />
