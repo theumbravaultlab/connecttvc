@@ -22,7 +22,7 @@ function groupToRow(g: Group, geo?: GeoResult | null) {
     // an address is present but this particular geocode attempt failed.
     area: g.address.trim() ? (geo?.city ?? g.area) : "",
     host: g.host,
-    co_host: g.coHost,
+    mentor: g.mentor,
     life: g.life,
     status: g.status,
     format: g.format,

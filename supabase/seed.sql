@@ -4,7 +4,7 @@
 -- ============================================================
 
 insert into public.groups
-  (id, name, day, time, area, host, co_host, life, status, format, freq,
+  (id, name, day, time, area, host, mentor, life, status, format, freq,
    capacity, members, childcare, topic, age_range, start_date, contact_email,
    address, description, x, y)
 values
@@ -15,7 +15,7 @@ values
   ('5','Common Grounds','Mon','12:00 PM','Midtown','Leah Bennett','—','Students','Forming','In-person','Weekly',12,8,false,'Campus lunch & study','18–24','Aug 2026','commongrounds@connecttvc.org','1 University Plz, Midtown','A midday, campus-adjacent gathering for students to connect and recharge over lunch.',54,48)
 on conflict (id) do update set
   name=excluded.name, day=excluded.day, time=excluded.time, area=excluded.area,
-  host=excluded.host, co_host=excluded.co_host, life=excluded.life,
+  host=excluded.host, mentor=excluded.mentor, life=excluded.life,
   status=excluded.status, format=excluded.format, freq=excluded.freq,
   capacity=excluded.capacity, members=excluded.members, childcare=excluded.childcare,
   topic=excluded.topic, age_range=excluded.age_range, start_date=excluded.start_date,

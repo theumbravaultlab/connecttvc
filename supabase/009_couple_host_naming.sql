@@ -3,7 +3,7 @@
 -- "married-couple hosts" convention: host becomes "<Male> <Surname>
 -- and <Female> <Surname>", and the group name becomes "The
 -- <PluralSurname>" (e.g. "The Churns"). Only touches host + name on
--- the 320 existing sample groups (g1-g320) -- mentor/co_host, address,
+-- the 320 existing sample groups (g1-g320) -- mentor, address,
 -- status, meeting day/time, capacity, etc. are all left exactly as
 -- they were. Also adds one new example group using this convention.
 -- Run this in the Supabase SQL editor after 008_backend_hardening.sql.
@@ -334,7 +334,7 @@ update public.groups set host = 'Kenneth Pena and Tiffany Pena', name = 'The Pen
 
 -- ---------- the new example group ----------
 insert into public.groups
-  (id, name, day, time, area, host, co_host, life, status, format, freq,
+  (id, name, day, time, area, host, mentor, life, status, format, freq,
    capacity, members, childcare, topic, age_range, start_date, contact_email,
    address, description, placement_details)
 values

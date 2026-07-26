@@ -38,7 +38,7 @@ delete from public.people;
 delete from public.groups;
 
 insert into public.groups
-  (id, name, day, time, area, host, co_host, life, status, format, freq,
+  (id, name, day, time, area, host, mentor, life, status, format, freq,
    capacity, members, childcare, topic, age_range, start_date, contact_email,
    address, description, placement_details)
 values

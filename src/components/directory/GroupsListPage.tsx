@@ -12,7 +12,7 @@ import { EmptyState, GroupTable } from "./tables";
 
 const blankGroup = (id: string): Group => ({
   id, name: "New Home Group", day: "Tue", time: "7:00 PM", area: "",
-  host: "", coHost: "—", life: "Everyone", status: "New", format: "In-person",
+  host: "", mentor: "—", life: "Everyone", status: "New", format: "In-person",
   freq: "Weekly", capacity: 12, members: 0, childcare: false, topic: "",
   ageRange: "All ages", startDate: "", contactEmail: "", address: "", desc: "",
   placementDetails: "",

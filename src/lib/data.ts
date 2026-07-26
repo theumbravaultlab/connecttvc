@@ -15,7 +15,7 @@ function rowToGroup(r: any): Group {
     time: r.time,
     area: r.area,
     host: r.host ?? "",
-    coHost: r.co_host ?? "—",
+    mentor: r.mentor ?? "—",
     life: r.life,
     status: r.status,
     format: r.format,

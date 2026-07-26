@@ -5,7 +5,7 @@ import type { Group, Person } from "./types";
 export const SEED_GROUPS: Group[] = [
   {
     id: "1", name: "Riverside Table", day: "Tue", time: "7:00 PM", area: "Eastside",
-    host: "Maya & Jon Alvarez", coHost: "Ben Ortiz", life: "Families", status: "Open",
+    host: "Maya & Jon Alvarez", mentor: "Ben Ortiz", life: "Families", status: "Open",
     format: "In-person", freq: "Weekly", capacity: 12, members: 9, childcare: true,
     topic: "Family life & the Gospels", ageRange: "30–45", startDate: "Sep 2025",
     contactEmail: "riverside@connecttvc.org", address: "412 Elm Ct, Eastside",
@@ -15,7 +15,7 @@ export const SEED_GROUPS: Group[] = [
   },
   {
     id: "2", name: "Sunrise Circle", day: "Wed", time: "6:30 AM", area: "Downtown",
-    host: "Grace Kim", coHost: "—", life: "Young Adults", status: "Closed",
+    host: "Grace Kim", mentor: "—", life: "Young Adults", status: "Closed",
     format: "In-person", freq: "Weekly", capacity: 8, members: 8, childcare: false,
     topic: "Morning study in Proverbs", ageRange: "22–30", startDate: "Jan 2026",
     contactEmail: "sunrise@connecttvc.org", address: "88 Market St, Downtown",
@@ -25,7 +25,7 @@ export const SEED_GROUPS: Group[] = [
   },
   {
     id: "3", name: "The Front Porch", day: "Thu", time: "7:30 PM", area: "North Hills",
-    host: "Danny Osei", coHost: "Ruth Osei", life: "Everyone", status: "Open",
+    host: "Danny Osei", mentor: "Ruth Osei", life: "Everyone", status: "Open",
     format: "Hybrid", freq: "Weekly", capacity: 14, members: 9, childcare: false,
     topic: "Come-as-you-are conversation", ageRange: "All ages", startDate: "Mar 2024",
     contactEmail: "frontporch@connecttvc.org", address: "9 Crestview Rd, North Hills",
@@ -35,7 +35,7 @@ export const SEED_GROUPS: Group[] = [
   },
   {
     id: "4", name: "Oak & Ember", day: "Sun", time: "5:00 PM", area: "Westgate",
-    host: "Priya & Sam Rao", coHost: "—", life: "Couples", status: "Open",
+    host: "Priya & Sam Rao", mentor: "—", life: "Couples", status: "Open",
     format: "In-person", freq: "Every other week", capacity: 12, members: 10, childcare: true,
     topic: "Marriage & rhythms of faith", ageRange: "28–50", startDate: "Oct 2025",
     contactEmail: "oakember@connecttvc.org", address: "220 Birch Ln, Westgate",
@@ -45,7 +45,7 @@ export const SEED_GROUPS: Group[] = [
   },
   {
     id: "5", name: "Common Grounds", day: "Mon", time: "12:00 PM", area: "Midtown",
-    host: "Leah Bennett", coHost: "—", life: "Students", status: "New",
+    host: "Leah Bennett", mentor: "—", life: "Students", status: "New",
     format: "In-person", freq: "Weekly", capacity: 12, members: 8, childcare: false,
     topic: "Campus lunch & study", ageRange: "18–24", startDate: "Aug 2026",
     contactEmail: "commongrounds@connecttvc.org", address: "1 University Plz, Midtown",

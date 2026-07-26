@@ -150,8 +150,8 @@ export function GroupForm({
         </Field>
         <Field label="Mentor(s)">
           <TextInput
-            value={group.coHost}
-            onChange={(e) => onPatch({ coHost: e.target.value })}
+            value={group.mentor}
+            onChange={(e) => onPatch({ mentor: e.target.value })}
           />
         </Field>
         <Field full label="Contact email">

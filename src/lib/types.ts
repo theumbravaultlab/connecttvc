@@ -50,7 +50,7 @@ export interface Group {
   time: string; // "7:00 PM"
   area: string;
   host: string;
-  coHost: string;
+  mentor: string;
   life: LifeStage;
   status: GroupStatus;
   format: Format;

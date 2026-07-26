@@ -57,7 +57,7 @@ create table if not exists public.groups (
   time text not null default '7:00 PM',
   area text not null default '',
   host text default '',
-  co_host text default '—',
+  mentor text default '—',
   life text not null default 'Everyone',
   status text not null default 'New',
   format text not null default 'In-person',
@@ -154,7 +154,7 @@ create policy "leaders manage requests" on public.join_requests
 create or replace view public.public_groups
 with (security_invoker = off) as
   select
-    id, name, day, time, area, host, co_host, life, status, format, freq,
+    id, name, day, time, area, host, mentor, life, status, format, freq,
     capacity, members, childcare, topic, age_range, start_date, description,
     coalesce(public_lat, lat) as lat,     -- fuzzed point only
     coalesce(public_lng, lng) as lng,
