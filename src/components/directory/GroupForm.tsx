@@ -1,7 +1,9 @@
 "use client";
 
-import { DAYS, GROUP_STATUSES, LIFE_STAGES, type Group } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import { DAYS, GROUP_STATUSES, LIFE_STAGES, initialsOf, type Group, type Person } from "@/lib/types";
 import {
+  Avatar,
   CapacityBar,
   ReadOnlyValue,
   SelectInput,
@@ -16,11 +18,15 @@ import { SectionHeading, Field } from "./form-bits";
 
 export function GroupForm({
   group,
+  people,
   onPatch,
 }: {
   group: Group;
+  people: Person[];
   onPatch: (patch: Partial<Group>) => void;
 }) {
+  const router = useRouter();
+  const roster = people.filter((p) => p.group === group.id);
   const s = spotsBadge(group.members, group.capacity);
   const spotsLabel = s.open <= 0 ? "Group is full" : `${s.open} of ${group.capacity} spots open`;
 
@@ -214,6 +220,30 @@ export function GroupForm({
           </SelectInput>
         </Field>
       </div>
+
+      <SectionHeading>Assigned people ({roster.length})</SectionHeading>
+      {roster.length === 0 ? (
+        <p className="text-[12.5px] font-semibold text-[var(--faint)]">
+          No one is currently assigned to this group.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {roster.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => router.push(`/directory/people/${p.id}`)}
+              className="flex items-center gap-2.5 rounded-xl bg-[var(--panel-1)] px-3 py-2 text-left transition-colors hover:bg-[var(--panel-2)]"
+            >
+              <Avatar initials={initialsOf(p.name)} size={26} tone="muted" />
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-[var(--ink)]">
+                {p.name}
+              </span>
+              <StatusPill status={p.status} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

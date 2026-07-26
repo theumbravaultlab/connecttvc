@@ -18,7 +18,7 @@ function validateGroup(g: Group): string | null {
 
 export function GroupEditPage({ id }: { id: string }) {
   const router = useRouter();
-  const { groups, setGroups, persisted } = useDirectoryData();
+  const { groups, people, setGroups, persisted } = useDirectoryData();
   const group = groups.find((g) => g.id === id) ?? null;
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -90,7 +90,7 @@ export function GroupEditPage({ id }: { id: string }) {
       )}
       <div className="hw-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[760px] px-4 py-5 sm:px-6">
-          <GroupForm group={group} onPatch={patchGroup} />
+          <GroupForm group={group} people={people} onPatch={patchGroup} />
         </div>
       </div>
       <SaveBar

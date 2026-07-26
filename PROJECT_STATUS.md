@@ -410,29 +410,47 @@ supabase/
                                  for any row that doesn't have one yet; NOT CONFIRMED RUN
   008_backend_hardening.sql      — CHECK constraints on every enum-like column, an index on
                                  people.group_id, drops 4 dead groups columns (x/y/public_lat/
-                                 public_lng) + the unused join_requests table; NOT CONFIRMED RUN
+                                 public_lng) + the unused join_requests table; CONFIRMED RUN
+  009_couple_host_naming.sql     — renames the 320 sample groups' host/name to a married-couple
+                                 convention + adds one example group (g321, "The Churns");
+                                 NOT YET RUN — see the dependency note below, this one only
+                                 does anything useful once 005 has actually run
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql
 ```
 
-As of this handoff, **schema.sql and seed.sql have been run** (confirmed
-earlier in the project). **002 through 008 have NOT been confirmed
-run** — this is the single most important pending action. 007 is fine to
-run anytime after schema.sql technically, but it's listed last because its
-backfill is only useful once the sample-data rows it's backfilling
-actually exist — run it before 005 and the backfill just does nothing.
-Note the order matters more than the numbers alone suggest elsewhere too:
-005 (bulk sample data) inserts
-a `placement_details` value on every group row, so it will fail outright if
-004 hasn't run first to add that column. After running them, geocoding
-happens on its own — see "Placing new records on the map is now automatic"
-below — since SQL inserts don't trigger the app's geocoding logic on their
-own, but the Directory list pages now detect and backfill any
-still-ungeocoded rows in the background the first time they're opened.
+**Current live/production status: schema.sql, seed.sql, 002, 003, 004,
+006, 007, and 008 are all confirmed run. `005_sample_data_dfw.sql` has
+deliberately never been run** — that's the explicit call the project owner
+made when going live (see "Product direction" and the go-live section
+above): production only has the original ~5+5 seed.sql rows, not the
+320-group/600-person fake DFW dataset, and 005 stays unrun until real data
+or a deliberate decision to demo with sample data.
+
+**This directly affects `009_couple_host_naming.sql`: its 320 `UPDATE ...
+WHERE id = 'gN'` statements target ids that only exist once 005 has been
+run.** With 005 unrun, running 009 today would silently no-op all 320
+updates (no matching rows) and only the final `INSERT` (the new "The
+Churns" example, `g321`) would actually do anything. If the intent is to
+see the full renamed sample dataset, run `005` immediately before `009`.
+If it's just the one example group that's wanted right now, running 009
+alone (without 005) is actually fine as-is.
+
+007 is fine to run anytime after schema.sql technically, but it's listed
+before 005 in the numbering only because its backfill is merely a no-op
+until the sample-data rows it's backfilling actually exist — running it
+before or after 005 is equally safe either way. Note the order matters
+more than the numbers alone suggest elsewhere too: 005 (bulk sample data)
+inserts a `placement_details` value on every group row, so it will fail
+outright if 004 hasn't run first to add that column. After running them,
+geocoding happens on its own — see "Placing new records on the map is now
+automatic" below — since SQL inserts don't trigger the app's geocoding
+logic on their own, but the Directory list pages now detect and backfill
+any still-ungeocoded rows in the background the first time they're opened.
 
 ## Domain model summary
 
@@ -998,6 +1016,48 @@ standing login constraint) — specifically, the actual "Find for" deep-link
 flow and the theme toggle button both still need a real signed-in pass to
 confirm end-to-end, though both were already reasoned through carefully
 above and neither changed behavior from before, just *how* it's achieved.
+
+## Post-launch round: Finder polish, group↔person sync, couple-host naming
+
+First batch of feedback since going live. Five items:
+
+1. **Removed the duplicate status pill from the Finder's "Finding for" summary
+   card** (`Finder.tsx`) — it's already shown right above in `PersonSearch`'s
+   compact "selected" view; this is a different spot than the Person-card
+   fix from the earlier round (that one was `PersonForm.tsx`'s header, on
+   the Directory page — this is the Map page's own summary card).
+2. **`GroupCitySearch` now opens on focus/click** with a browsable list
+   (up to 50 each) even before typing, same as `PersonSearch` — it
+   previously required typing before showing anything at all. Added an
+   All/Groups/Cities scope toggle (pill row at the top of the dropdown,
+   defaults to All) to narrow which section(s) show.
+3. **Assigning a Person's group now auto-sets status to "Grouped"; clearing
+   it back to Unassigned auto-reverts to "Actively Searching"**
+   (`PersonForm.tsx`) — both directions, still just a starting point,
+   freely overridable via the Status field right above it.
+4. **`GroupForm.tsx` gained an "Assigned people" section** — every Person
+   whose `group` matches this group's id, shown as a clickable row (avatar,
+   name, status pill) that jumps to that person's edit page. Required
+   threading `people` down through `GroupEditPage.tsx` (previously only
+   `PersonForm`/`PersonEditPage` needed it).
+5. **New migration `supabase/009_couple_host_naming.sql`** — renames all
+   320 existing sample groups to a "married-couple hosts" convention:
+   `host` becomes `"<Male> <Surname> and <Female> <Surname>"`, `name`
+   becomes `"The <PluralSurname>"` (correct pluralization: `s`/`x`/`z`/
+   `ch`/`sh` endings get `"es"`, everything else — including names ending
+   in `y`, e.g. "The Kennedys" not "Kennedies" — just gets `"s"`). Only
+   `host`/`name` change; mentor, address, status, meeting day/time,
+   capacity, etc. are untouched on the 320 existing rows. Also inserts one
+   new example row (`g321`, "The Churns") using the exact fields given:
+   Darren & Samantha Churn, 3200 Mason Ave Corinth TX 76210, Closed,
+   Mondays 6:30 PM. Generated by a one-off Node script (not checked in,
+   same convention as the original 005 generator) — confirmed all 320
+   generated names are unique before writing the file. **Not yet run**
+   against the live (production) database.
+
+Verified: `tsc` clean, `eslint` clean (0 problems, same as the post-cleanup
+baseline), a full production build succeeds with the same route list as
+before. Not yet click-tested live — same standing constraint.
 
 ## What's built and verified working
 

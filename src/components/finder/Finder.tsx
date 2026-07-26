@@ -14,7 +14,7 @@ import {
 } from "@/lib/types";
 import { ageMatchesRange } from "@/lib/ageRange";
 import { lifeColors } from "@/lib/colors";
-import { Avatar, StatusPill } from "@/components/ui";
+import { Avatar } from "@/components/ui";
 import {
   CarIcon,
   CheckIcon,
@@ -401,9 +401,8 @@ export function Finder({
                   <div className="flex items-center gap-2.5">
                     <Avatar initials={initialsOf(person.name)} size={34} />
                     <div>
-                      <div className="flex items-center gap-1.5 text-[13px] font-bold text-[var(--ink)]">
+                      <div className="text-[13px] font-bold text-[var(--ink)]">
                         {person.name}
-                        <StatusPill status={person.status} />
                       </div>
                       <div className="text-[12px] font-semibold text-[var(--muted)]">
                         {person.notes.split(",")[0]} · lives in {person.area}
@@ -728,12 +727,21 @@ function DaysFilterPopover({
   );
 }
 
+type SearchScope = "all" | "groups" | "cities";
+const SEARCH_SCOPES: { key: SearchScope; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "groups", label: "Groups" },
+  { key: "cities", label: "Cities" },
+];
+
 /** Free-text lookup for the browse-mode search box — types still live-
  * filter the list below exactly as before, but this layers an actual
  * dropdown of matching group names and matching cities on top (same
- * click-to-jump idiom as PersonSearch), instead of a plain text input with
- * no visible feedback about what's actually matching. Picking a group
- * selects it; picking a city adds it to the City filter. */
+ * click-to-jump idiom as PersonSearch, including opening on focus/click
+ * even before anything's typed, so there's a browsable list rather than
+ * needing a name in mind). Picking a group selects it; picking a city
+ * adds it to the City filter. A scope toggle (All/Groups/Cities, default
+ * All) narrows which section(s) show. */
 function GroupCitySearch({
   query,
   onQueryChange,
@@ -750,6 +758,7 @@ function GroupCitySearch({
   onSelectCity: (city: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [scope, setScope] = useState<SearchScope>("all");
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -769,10 +778,14 @@ function GroupCitySearch({
   }, [open]);
 
   const q = query.trim().toLowerCase();
-  const matchingCities = q ? cityOptions.filter((c) => c.toLowerCase().includes(q)).slice(0, 6) : [];
-  const matchingGroups = q
-    ? groups.filter((g) => g.name.toLowerCase().includes(q)).slice(0, 6)
-    : [];
+  const matchingCities =
+    scope === "groups"
+      ? []
+      : (q ? cityOptions.filter((c) => c.toLowerCase().includes(q)) : cityOptions).slice(0, 50);
+  const matchingGroups =
+    scope === "cities"
+      ? []
+      : (q ? groups.filter((g) => g.name.toLowerCase().includes(q)) : groups).slice(0, 50);
   const hasResults = matchingCities.length > 0 || matchingGroups.length > 0;
 
   return (
@@ -805,8 +818,27 @@ function GroupCitySearch({
           </button>
         )}
       </div>
-      {open && q && (
+      {open && (
         <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-[9px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_8px_20px_rgba(22,50,79,.14)]">
+          <div className="flex items-center gap-1.5 border-b border-[var(--divider)] bg-[var(--panel-1)] px-2.5 py-1.5">
+            {SEARCH_SCOPES.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope(s.key)}
+                aria-pressed={scope === s.key}
+                className="rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors"
+                style={
+                  scope === s.key
+                    ? { background: "var(--brand-blue)", color: "#fff" }
+                    : { background: "var(--surface)", color: "var(--muted)" }
+                }
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
           {hasResults ? (
             <ul className="max-h-64 overflow-y-auto py-1">
               {matchingCities.map((city) => (
@@ -855,7 +887,7 @@ function GroupCitySearch({
             </ul>
           ) : (
             <div className="px-3 py-2 text-[12px] font-semibold text-[var(--faint)]">
-              No groups or cities match &quot;{query.trim()}&quot;.
+              {q ? <>No matches for &quot;{query.trim()}&quot;.</> : "Nothing to show yet."}
             </div>
           )}
         </div>

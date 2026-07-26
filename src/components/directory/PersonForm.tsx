@@ -180,7 +180,14 @@ export function PersonForm({
         <Field full label="Assigned group">
           <SelectInput
             value={person.group ?? ""}
-            onChange={(e) => onPatch({ group: e.target.value || null })}
+            onChange={(e) => {
+              const group = e.target.value || null;
+              // Assigning a group auto-sets status to Grouped; clearing it
+              // back to Unassigned auto-reverts to Actively Searching —
+              // either way still just a starting point, freely editable
+              // via the Status field below.
+              onPatch({ group, status: group ? "Grouped" : "Actively Searching" });
+            }}
           >
             <option value="">— Unassigned —</option>
             {groups.map((g) => (
