@@ -14,7 +14,7 @@ import {
 } from "@/lib/types";
 import { ageMatchesRange } from "@/lib/ageRange";
 import { lifeColors } from "@/lib/colors";
-import { Avatar } from "@/components/ui";
+import { Avatar, PartyTag } from "@/components/ui";
 import {
   CarIcon,
   CheckIcon,
@@ -401,8 +401,9 @@ export function Finder({
                   <div className="flex items-center gap-2.5">
                     <Avatar initials={initialsOf(person.name)} size={34} />
                     <div>
-                      <div className="text-[13px] font-bold text-[var(--ink)]">
+                      <div className="flex items-center gap-1.5 text-[13px] font-bold text-[var(--ink)]">
                         {person.name}
+                        <PartyTag partySize={person.partySize} />
                       </div>
                       <div className="text-[12px] font-semibold text-[var(--muted)]">
                         {person.notes.split(",")[0]} · lives in {person.area}

@@ -1,6 +1,6 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-07-24 · commit `804b733`
+Last updated: 2026-07-26 · commit `804b733` (pending: this batch not yet committed)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -415,12 +415,17 @@ supabase/
                                  convention + adds one example group (g321, "The Churns");
                                  NOT YET RUN — see the dependency note below, this one only
                                  does anything useful once 005 has actually run
+  010_person_party_size.sql      — adds people.party_size (default 1) + people.partner_name, for
+                                 couples/households searching together as one Person record;
+                                 NOT CONFIRMED RUN
+  011_contact_log.sql            — new contact_log table (append-only outreach history per
+                                 person, leader-only RLS); NOT CONFIRMED RUN
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql
 ```
 
 **Current live/production status: schema.sql, seed.sql, 002, 003, 004,
@@ -1165,6 +1170,79 @@ Verified: `tsc`/`eslint` clean (0 problems), full production build
 succeeds. Not yet click-tested live with a real save — same standing
 constraint — but the root cause (a plain missing return value) is
 unambiguous, not a guess.
+
+## Feature batch: spots-open coloring, group auto-close, group lookup, matching labels, party size, outreach log
+
+Seven-item batch from the project owner, gathered via a clarifying-questions
+pass on three open design calls (un-full revert behavior, outreach tracking
+granularity, couples/household structure):
+
+1. **`spotsBadge()` (`src/lib/colors.ts`) now takes the group's `status`.**
+   "Spots open" is gray whenever the group is full *or* `Closed`; still
+   green for Open/New with room. `SpotsPill` (`ui.tsx`) and `GroupCard.tsx`/
+   `GroupForm.tsx` pass `status` through.
+2. **A group auto-closes when it becomes full.** In `GroupForm.tsx`, editing
+   "Max capacity" or "Current members" to make `capacity === members` also
+   sets `status: "Closed"` in the same patch. Deliberately **does not**
+   auto-revert if it later becomes un-full — by then it may be closed for
+   an unrelated reason, so reopening stays a manual Status-field decision
+   (same asymmetric-revert idiom as the Grouped/Actively-Searching sync).
+3. **Assigned Group on the Person form is now a searchable dropdown**
+   (`AssignedGroupPicker`, bottom of `PersonForm.tsx`) — same
+   outside-click/Escape-close idiom as the Map's group/city search — plus a
+   "View" button that navigates straight to that group's edit page once one
+   is selected.
+4. **Removed the stale amber tip that used to sit under Assigned Group** —
+   no longer relevant, per the project owner.
+5. **Matching-relevant fields are now labeled on both cards.** `FieldLabel`
+   (`ui.tsx`) gained a `matching?: boolean` prop rendering a blue "Matching"
+   pill (distinct from the existing amber `tag` pill); `Field`
+   (`form-bits.tsx`) forwards it. Flagged fields: Group's Meeting day, City,
+   Life stage, Age range, Childcare available; Person's Available days,
+   Home city, Life stage, Age, Childcare needed.
+6. **Party size / partner name, for couples/households searching together**
+   (e.g. "John and Sarah, the Smiths" need 2 spots, searched as one unit).
+   Deliberately **one `Person` record**, not two linked records — simpler,
+   and a match only ever needs evaluating once per party. Added
+   `Person.partySize` (number, default 1) and `Person.partnerName` (plain
+   text), threaded through `types.ts` → `data.ts`'s `rowToPerson` →
+   `actions.ts`'s `personToRow` → a new "Household" section in
+   `PersonForm.tsx`. Migration: `supabase/010_person_party_size.sql`
+   (`people.party_size int not null default 1`, `people.partner_name text`,
+   plus a `party_size >= 1` check). Surfaced wherever a person's summary
+   shows via a new `PartyTag` component (`ui.tsx`, "Party of N" pill, hidden
+   when `partySize <= 1`): `PersonTable.tsx`, `PersonSearch.tsx` (both the
+   selected chip and the dropdown rows), and Finder's "Finding for" summary
+   card.
+7. **New outreach/contact log, to avoid double-messaging people.** Chosen
+   design: an **append-only log**, not a single overwritable
+   "last contacted" field — entries are timestamped and
+   auto-attributed to the signed-in coordinator server-side (via the
+   existing `getViewerEmail()` helper), never hand-typed, so the log stays
+   trustworthy across multiple coordinators working the same list.
+   - Migration: `supabase/011_contact_log.sql` — new `contact_log` table
+     (`person_id` FK on delete cascade, `contacted_by`, `note`,
+     `created_at`, indexed on `person_id`), leader-only RLS matching the
+     `groups`/`people` policy pattern.
+   - New server actions in `actions.ts`: `getContactLog(personId)` (most
+     recent first) and `addContactLogEntry(personId, note)` (auto-attributes
+     `contacted_by`).
+   - New `src/components/directory/ContactLog.tsx` — rendered under a new
+     "Outreach" section at the bottom of `PersonForm.tsx`. Shows a
+     "Last reached out ... by ... — 'note'" banner up top (the actual
+     double-messaging safeguard — visible without scrolling the log), an
+     add-entry row (optional note + "Log outreach" button), and the full
+     history below. Fetch errors (e.g. migration not yet run) surface as an
+     inline banner instead of an infinite spinner.
+
+**Migrations 010 and 011 are NOT YET CONFIRMED RUN against production** —
+run them (in order, after 009) before relying on party size or the outreach
+log live; until then, `ContactLog` will show its fetch-error banner instead
+of a working log, and party size/partner name will silently read/write as
+defaults (1 / "") since the columns don't exist yet.
+
+Verified: `tsc`/`eslint` clean (0 problems), full production build
+succeeds. Not yet click-tested live — same standing constraint.
 
 ## What's built and verified working
 

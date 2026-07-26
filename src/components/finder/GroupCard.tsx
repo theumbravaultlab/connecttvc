@@ -119,7 +119,7 @@ export const GroupCard = forwardRef<
               {group.name}
             </h3>
             <div className="flex shrink-0 items-center gap-1.5">
-              <SpotsPill members={group.members} capacity={group.capacity} />
+              <SpotsPill members={group.members} capacity={group.capacity} status={group.status} />
               <button
                 type="button"
                 onClick={(e) => {

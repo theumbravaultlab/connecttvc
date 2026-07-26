@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import type { Group, Person } from "@/lib/types";
 import { initialsOf } from "@/lib/types";
-import { Avatar, LifeTag, StatusPill } from "@/components/ui";
+import { Avatar, LifeTag, PartyTag, StatusPill } from "@/components/ui";
 import { SearchIcon } from "@/components/icons";
 
 export function EmptyState({ label, hasFilters }: { label: "groups" | "people"; hasFilters: boolean }) {
@@ -102,6 +102,7 @@ export function PersonTable({
                 <span className="font-[family-name:var(--font-fredoka)] font-semibold">
                   {p.name}
                 </span>
+                <PartyTag partySize={p.partySize} />
               </span>
             </td>
             <td className={td}>{p.area || "—"}</td>

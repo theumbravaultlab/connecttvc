@@ -14,7 +14,7 @@ const blankPerson = (id: string): Person => ({
   id, name: "New Member", email: "", phone: "", area: "", address: "",
   age: null, days: [], timePref: "Flexible", life: "Everyone", interests: "",
   childcareNeeded: false, accessibility: "—", status: "New", group: null,
-  joined: "", notes: "",
+  joined: "", notes: "", partySize: 1, partnerName: "",
 });
 
 export function PeopleListPage() {

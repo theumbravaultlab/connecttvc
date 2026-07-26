@@ -27,7 +27,7 @@ export function GroupForm({
 }) {
   const router = useRouter();
   const roster = people.filter((p) => p.group === group.id);
-  const s = spotsBadge(group.members, group.capacity);
+  const s = spotsBadge(group.members, group.capacity, group.status);
   const spotsLabel = s.open <= 0 ? "Group is full" : `${s.open} of ${group.capacity} spots open`;
 
   return (
@@ -85,7 +85,7 @@ export function GroupForm({
 
       <SectionHeading>When &amp; where</SectionHeading>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Meeting day">
+        <Field label="Meeting day" matching>
           <SelectInput
             value={group.day}
             onChange={(e) => onPatch({ day: e.target.value as Group["day"] })}
@@ -135,7 +135,7 @@ export function GroupForm({
             placeholder="Start typing an address…"
           />
         </Field>
-        <Field label="City">
+        <Field label="City" matching>
           <ReadOnlyValue value={group.area} placeholder="From address" />
         </Field>
       </div>
@@ -165,7 +165,7 @@ export function GroupForm({
 
       <SectionHeading>Capacity &amp; fit</SectionHeading>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Life stage">
+        <Field label="Life stage" matching>
           <SelectInput
             value={group.life}
             onChange={(e) => onPatch({ life: e.target.value as Group["life"] })}
@@ -175,7 +175,7 @@ export function GroupForm({
             ))}
           </SelectInput>
         </Field>
-        <Field label="Age range">
+        <Field label="Age range" matching>
           <TextInput
             value={group.ageRange}
             onChange={(e) => onPatch({ ageRange: e.target.value })}
@@ -186,7 +186,18 @@ export function GroupForm({
             type="number"
             min={1}
             value={group.capacity}
-            onChange={(e) => onPatch({ capacity: Number(e.target.value) || 0 })}
+            onChange={(e) => {
+              const capacity = Number(e.target.value) || 0;
+              // Becoming full is a reason to close a group; becoming
+              // *not* full again is deliberately not auto-reverted — by
+              // then it may be closed for an unrelated reason, so
+              // reopening stays a manual decision (via the Status field).
+              onPatch(
+                capacity > 0 && capacity === group.members
+                  ? { capacity, status: "Closed" }
+                  : { capacity },
+              );
+            }}
           />
         </Field>
         <Field label="Current members">
@@ -194,10 +205,17 @@ export function GroupForm({
             type="number"
             min={0}
             value={group.members}
-            onChange={(e) => onPatch({ members: Number(e.target.value) || 0 })}
+            onChange={(e) => {
+              const members = Number(e.target.value) || 0;
+              onPatch(
+                group.capacity > 0 && members === group.capacity
+                  ? { members, status: "Closed" }
+                  : { members },
+              );
+            }}
           />
         </Field>
-        <Field full label="Childcare available">
+        <Field full label="Childcare available" matching>
           <div className="flex items-center gap-2 pt-1">
             <Toggle
               on={group.childcare}

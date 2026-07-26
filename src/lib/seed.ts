@@ -63,6 +63,7 @@ export const SEED_PEOPLE: Person[] = [
     interests: "Marriage, serving together", childcareNeeded: false, accessibility: "—",
     status: "New", group: null, joined: "Jun 2026",
     notes: "Recently married, new to Connect TVC and eager to plug in.",
+    partySize: 2, partnerName: "Sarah Smith",
   },
   {
     id: "sl", name: "Sarah Lopez", email: "sarah.lopez@email.com", phone: "(555) 664-1120",
@@ -71,6 +72,7 @@ export const SEED_PEOPLE: Person[] = [
     interests: "Parenting, cooking", childcareNeeded: true, accessibility: "—",
     status: "Grouped", group: "1", joined: "Feb 2026",
     notes: "Family of four, needs childcare on meeting nights.",
+    partySize: 1, partnerName: "",
   },
   {
     id: "mb", name: "Marcus Bell", email: "marcus.b@email.com", phone: "(555) 903-7781",
@@ -79,6 +81,7 @@ export const SEED_PEOPLE: Person[] = [
     interests: "Hiking, apologetics", childcareNeeded: false,
     accessibility: "Prefers ground-floor access", status: "Waitlisted", group: null,
     joined: "May 2026", notes: "New in town, flexible on timing.",
+    partySize: 1, partnerName: "",
   },
   {
     id: "aw", name: "Aisha Warren", email: "aisha.w@email.com", phone: "(555) 448-2093",
@@ -87,6 +90,7 @@ export const SEED_PEOPLE: Person[] = [
     interests: "Worship, mentoring", childcareNeeded: false, accessibility: "—",
     status: "Actively Searching", group: null, joined: "Jul 2026",
     notes: "Prefers an early-morning group downtown.",
+    partySize: 1, partnerName: "",
   },
   {
     id: "dt", name: "David Tran", email: "david.tran@email.com", phone: "(555) 771-5560",
@@ -95,5 +99,6 @@ export const SEED_PEOPLE: Person[] = [
     interests: "Study groups, gaming", childcareNeeded: false, accessibility: "—",
     status: "Grouped", group: "5", joined: "Aug 2026",
     notes: "Sophomore, connected through campus ministry.",
+    partySize: 1, partnerName: "",
   },
 ];

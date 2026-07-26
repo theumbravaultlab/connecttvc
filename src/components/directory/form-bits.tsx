@@ -41,11 +41,13 @@ export function SectionHeading({ children }: { children: ReactNode }) {
 export function Field({
   label,
   tag,
+  matching,
   full = false,
   children,
 }: {
   label: string;
   tag?: string;
+  matching?: boolean;
   full?: boolean;
   children: ReactNode;
 }) {
@@ -56,7 +58,7 @@ export function Field({
 
   return (
     <div className={full ? "sm:col-span-2" : undefined}>
-      <FieldLabel tag={tag} htmlFor={id}>
+      <FieldLabel tag={tag} matching={matching} htmlFor={id}>
         {label}
       </FieldLabel>
       {control}

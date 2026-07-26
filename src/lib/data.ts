@@ -55,6 +55,8 @@ function rowToPerson(r: any): Person {
     group: r.group_id ? String(r.group_id) : null,
     joined: r.joined ?? "",
     notes: r.notes ?? "",
+    partySize: r.party_size ?? 1,
+    partnerName: r.partner_name ?? "",
     lat: r.lat,
     lng: r.lng,
     updatedAt: r.updated_at,

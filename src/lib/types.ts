@@ -97,6 +97,13 @@ export interface Person {
   group: string | null; // assigned group id
   joined: string;
   notes: string;
+  // Couples/households searching together (e.g. "the Smiths") stay one
+  // Person record rather than two — partySize is how many spots they
+  // need, partnerName is a plain-text name for whoever they're searching
+  // with. Deliberately not a second linked record: simpler, and matching
+  // only ever needs to be evaluated once per party, not once per person.
+  partySize: number;
+  partnerName: string;
   // Geo (populated by geocoding on save), same pattern as Group.
   lat?: number | null;
   lng?: number | null;
@@ -113,6 +120,19 @@ export const DAY_LONG: Record<DayShort, string> = {
   Sat: "Saturday",
   Sun: "Sunday",
 };
+
+/** One entry in a person's outreach log — append-only, timestamped, and
+ * auto-attributed to whichever coordinator logged it server-side. Exists
+ * specifically to prevent double-messaging: multiple coordinators working
+ * the same list can see at a glance whether (and when) someone was already
+ * reached out to, rather than trusting a single overwritable field. */
+export interface ContactLogEntry {
+  id: string;
+  personId: string;
+  contactedBy: string | null;
+  note: string;
+  createdAt: string;
+}
 
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

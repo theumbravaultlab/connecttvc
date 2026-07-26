@@ -74,11 +74,19 @@ export function capacityFill(members: number, capacity: number): string {
   return "var(--brand-blue)";
 }
 
-/** Spots-open pill styling + label. */
-export function spotsBadge(members: number, capacity: number) {
+/** Spots-open pill styling + label. Gray whenever the group is full
+ * (unchanged) *or* whenever it's Closed — a Closed group shouldn't read
+ * as "green/available" just because its numbers happen to leave room,
+ * since it isn't actually accepting anyone. */
+export function spotsBadge(members: number, capacity: number, status?: GroupStatus) {
   const open = Math.max(0, capacity - members);
-  if (open <= 0) {
-    return { label: "Group full", bg: "var(--divider)", fg: "var(--muted)", open: 0 };
+  if (open <= 0 || status === "Closed") {
+    return {
+      label: open <= 0 ? "Group full" : `${open} spots open`,
+      bg: "var(--divider)",
+      fg: "var(--muted)",
+      open,
+    };
   }
   return {
     label: `${open} spots open`,

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { PERSON_STATUSES, initialsOf, type Person, type PersonStatus } from "@/lib/types";
-import { Avatar, StatusPill } from "@/components/ui";
+import { Avatar, PartyTag, StatusPill } from "@/components/ui";
 import { SearchIcon, XIcon } from "@/components/icons";
 
 /**
@@ -82,6 +82,7 @@ export function PersonSearch({
           <span className="truncate text-[13px] font-bold text-[var(--brand-blue)]">
             {selected.name}
           </span>
+          <PartyTag partySize={selected.partySize} />
           <StatusPill status={selected.status} />
         </span>
         <button
@@ -154,6 +155,7 @@ export function PersonSearch({
                     <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--ink)]">
                       {p.name}
                     </span>
+                    <PartyTag partySize={p.partySize} />
                     <StatusPill status={p.status} />
                   </button>
                 </li>

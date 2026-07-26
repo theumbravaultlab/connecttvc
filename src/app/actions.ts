@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getViewerEmail } from "@/lib/auth";
 import { geocodeAddress, type GeoResult } from "@/lib/geocode";
 import { getTravelTimes, type TravelTime } from "@/lib/routes";
-import type { Group, Person } from "@/lib/types";
+import type { ContactLogEntry, Group, Person } from "@/lib/types";
 
 type SupabaseClient = NonNullable<Awaited<ReturnType<typeof getServerSupabase>>>;
 
@@ -63,6 +64,8 @@ function personToRow(p: Person, geo?: GeoResult | null) {
     group_id: p.group,
     joined: p.joined,
     notes: p.notes,
+    party_size: p.partySize,
+    partner_name: p.partnerName,
     lat: geo ? geo.lat : (p.lat ?? null),
     lng: geo ? geo.lng : (p.lng ?? null),
   };
@@ -287,6 +290,54 @@ export async function deletePerson(id: string): Promise<ActionResult> {
   const { error } = await supabase.from("people").delete().eq("id", id);
   if (error) return { ok: false, error: error.message, persisted: true };
   return { ok: true, persisted: true };
+}
+
+function rowToContactLogEntry(r: {
+  id: string;
+  person_id: string;
+  contacted_by: string | null;
+  note: string | null;
+  created_at: string;
+}): ContactLogEntry {
+  return {
+    id: r.id,
+    personId: r.person_id,
+    contactedBy: r.contacted_by,
+    note: r.note ?? "",
+    createdAt: r.created_at,
+  };
+}
+
+/** Most-recent-first outreach history for one person. */
+export async function getContactLog(personId: string): Promise<ContactLogEntry[]> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("contact_log")
+    .select("id, person_id, contacted_by, note, created_at")
+    .eq("person_id", personId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`Couldn't load the contact log: ${error.message}`);
+  return (data ?? []).map(rowToContactLogEntry);
+}
+
+/** Appends a new outreach entry, auto-attributed to the signed-in
+ * coordinator — never manually typed, so the log stays trustworthy for
+ * "has anyone already reached out to this person" decisions. */
+export async function addContactLogEntry(
+  personId: string,
+  note: string,
+): Promise<{ ok: boolean; error?: string; entry?: ContactLogEntry }> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true };
+  const contactedBy = await getViewerEmail();
+  const { data, error } = await supabase
+    .from("contact_log")
+    .insert({ person_id: personId, contacted_by: contactedBy, note })
+    .select("id, person_id, contacted_by, note, created_at")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, entry: rowToContactLogEntry(data) };
 }
 
 export async function signOut() {

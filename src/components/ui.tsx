@@ -15,6 +15,21 @@ export function LifeTag({ life }: { life: LifeStage }) {
   );
 }
 
+/** Shown next to a person's name wherever their summary appears, whenever
+ * they're searching as a party of 2+ — a quick visual cue that placing them
+ * takes multiple open spots, not one. */
+export function PartyTag({ partySize }: { partySize: number }) {
+  if (partySize <= 1) return null;
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-extrabold uppercase tracking-wide"
+      style={{ background: "var(--panel-3)", color: "var(--brand-blue)" }}
+    >
+      Party of {partySize}
+    </span>
+  );
+}
+
 export function StatusPill({ status }: { status: GroupStatus | PersonStatus }) {
   const c = statusColors(status);
   return (
@@ -30,11 +45,13 @@ export function StatusPill({ status }: { status: GroupStatus | PersonStatus }) {
 export function SpotsPill({
   members,
   capacity,
+  status,
 }: {
   members: number;
   capacity: number;
+  status?: GroupStatus;
 }) {
-  const s = spotsBadge(members, capacity);
+  const s = spotsBadge(members, capacity, status);
   return (
     <span
       className="inline-flex shrink-0 items-center rounded-full px-2.5 py-[3px] text-[11px] font-extrabold"
@@ -152,10 +169,16 @@ export function DayPills({
 export function FieldLabel({
   children,
   tag,
+  matching,
   htmlFor,
 }: {
   children: ReactNode;
   tag?: string;
+  /** Flags this field as one the Finder's matching logic actually reads
+   * (city, available days, life stage, age, childcare) — a standardized
+   * badge distinct from `tag`'s amber notes, so it's obvious at a glance
+   * which data points are worth getting right for matching to work. */
+  matching?: boolean;
   htmlFor?: string;
 }) {
   return (
@@ -164,6 +187,14 @@ export function FieldLabel({
       className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-[var(--faint)]"
     >
       {children}
+      {matching && (
+        <span
+          className="rounded-full px-1.5 py-[1px] text-[10px] font-bold"
+          style={{ background: "var(--panel-3)", color: "var(--brand-blue)" }}
+        >
+          Matching
+        </span>
+      )}
       {tag && (
         <span
           className="rounded-full px-1.5 py-[1px] text-[10px] font-bold"
