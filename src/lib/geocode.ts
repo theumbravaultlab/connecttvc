@@ -38,17 +38,34 @@ export async function geocodeAddress(address: string): Promise<GeoResult | null>
   try {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(trimmed)}&key=${key}`;
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`Geocoding API HTTP ${res.status} for address: ${trimmed}`);
+      return null;
+    }
     const data = await res.json();
     const result = data?.results?.[0];
     const location = result?.geometry?.location;
-    if (data.status !== "OK" || typeof location?.lat !== "number") return null;
+    if (data.status !== "OK" || typeof location?.lat !== "number") {
+      // ZERO_RESULTS just means "couldn't place this address" — expected
+      // and not worth logging. Anything else (REQUEST_DENIED, OVER_QUERY_
+      // LIMIT, INVALID_REQUEST, ...) usually means the key/billing/quota is
+      // broken, which otherwise looks identical to a bad address with no
+      // server-side trace to tell the two apart.
+      if (data.status !== "ZERO_RESULTS") {
+        console.error(
+          `Geocoding API returned ${data.status} for address: ${trimmed}`,
+          data.error_message ?? "",
+        );
+      }
+      return null;
+    }
     return {
       lat: location.lat,
       lng: location.lng,
       city: extractCity(result.address_components),
     };
-  } catch {
+  } catch (err) {
+    console.error(`Geocoding request failed for address: ${trimmed}`, err);
     return null;
   }
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { AdvancedMarker, Map as GoogleMap, useMap } from "@vis.gl/react-google-maps";
+import { AdvancedMarker, ColorScheme, Map as GoogleMap, useMap } from "@vis.gl/react-google-maps";
 import { initialsOf, type Group, type Person } from "@/lib/types";
-import { lifeColors } from "@/lib/colors";
+import { lifeColors, statusSolid } from "@/lib/colors";
+import { UsersIcon } from "@/components/icons";
+import { useTheme } from "@/components/ThemeProvider";
 
 const BROWSER_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ?? "";
 // "DEMO_MAP_ID" is Google's official placeholder for local development —
@@ -37,10 +39,12 @@ function personLocation(p: Person | null | undefined): LatLng | null {
 }
 
 // A pin to be rendered, tagged so jittered positions can be routed back to
-// the right visual (teardrop group pin vs. person silhouette).
+// the right visual (teardrop group pin, the one "Finding for" silhouette,
+// or a smaller status-colored person pin).
 type MapPin =
   | { kind: "group"; id: string; lat: number; lng: number; group: LocatedGroup }
-  | { kind: "person"; id: string; lat: number; lng: number; person: Person };
+  | { kind: "person"; id: string; lat: number; lng: number; person: Person }
+  | { kind: "statusPerson"; id: string; lat: number; lng: number; person: Person };
 
 /**
  * Nudges pins that would otherwise sit on (or very near) the exact same
@@ -84,26 +88,50 @@ function spreadOverlaps<T extends { id: string; lat: number; lng: number }>(
 }
 
 // Note: no <APIProvider> here — it's mounted once at the AppShell level so
-// both this map and the Console's address autocomplete share one loaded
+// both this map and the Directory's address autocomplete share one loaded
 // Maps JS instance instead of loading the script twice.
 export function FinderMap({
   groups,
   person,
+  statusPeople,
   selectedId,
   onSelect,
+  showAllPeople,
+  onToggleShowAllPeople,
+  showPeopleAvailable,
 }: {
   groups: Group[];
   /** The currently selected "Finding for" person, if any — shown as a
    * distinct pin and included when fitting the map to visible points. */
   person?: Person | null;
+  /** Everyone to render as a smaller, status-colored pin when
+   * `showAllPeople` is on — already scoped by the caller to either "the
+   * selected group's roster" or "everyone", and already excludes `person`
+   * so the two pin types never overlap for the same person. */
+  statusPeople: Person[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  showAllPeople: boolean;
+  onToggleShowAllPeople: () => void;
+  /** Hide the toggle entirely when there's no one to show (e.g. no People
+   * data at all), same guard the "Finding for" search already uses. */
+  showPeopleAvailable: boolean;
 }) {
+  const { theme } = useTheme();
   const located = groups.filter(hasLocation);
   const missing = groups.length - located.length;
   const personPoint = personLocation(person);
+  const locatedStatusPeople = useMemo(
+    () => statusPeople.filter((p): p is Person & { lat: number; lng: number } =>
+      typeof p.lat === "number" && typeof p.lng === "number",
+    ),
+    [statusPeople],
+  );
 
-  const pins = useMemo(() => {
+  // Fit-to-bounds only ever considers groups + the "Finding for" person —
+  // the status-colored roster pins render on the map but deliberately don't
+  // affect auto-zoom, so toggling "Show people" never yanks the viewport.
+  const fitPoints = useMemo(() => {
     const raw: MapPin[] = located.map((g) => ({
       kind: "group",
       id: g.id,
@@ -114,13 +142,20 @@ export function FinderMap({
     if (person && personPoint) {
       raw.push({ kind: "person", id: person.id, lat: personPoint.lat, lng: personPoint.lng, person });
     }
-    return spreadOverlaps(raw);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return raw;
   }, [located, person, personPoint]);
+
+  const pins = useMemo(() => {
+    const raw: MapPin[] = [...fitPoints];
+    for (const p of locatedStatusPeople) {
+      raw.push({ kind: "statusPerson", id: p.id, lat: p.lat, lng: p.lng, person: p });
+    }
+    return spreadOverlaps(raw);
+  }, [fitPoints, locatedStatusPeople]);
 
   if (!BROWSER_KEY) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-[#eaf3fc] p-6 text-center text-[13px] font-semibold text-[#5b7a97]">
+      <div className="flex h-full w-full items-center justify-center bg-[var(--panel-3)] p-6 text-center text-[13px] font-semibold text-[var(--muted)]">
         Map needs a Google Maps browser key — add
         NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY to .env.local.
       </div>
@@ -136,46 +171,86 @@ export function FinderMap({
         restriction={{ latLngBounds: DFW_BOUNDS, strictBounds: true }}
         gestureHandling="greedy"
         disableDefaultUI={false}
+        colorScheme={theme === "dark" ? ColorScheme.DARK : ColorScheme.LIGHT}
         className="h-full w-full"
       >
-        <FitToPoints points={pins} />
-        {pins.map((pin) =>
-          pin.kind === "group" ? (
-            <GroupPin
-              key={pin.id}
-              position={{ lat: pin.lat, lng: pin.lng }}
-              group={pin.group}
-              selected={pin.group.id === selectedId}
-              onSelect={onSelect}
-            />
-          ) : (
-            <PersonPin
-              key={`person-${pin.id}`}
+        <FitToPoints points={fitPoints} active={!!person} />
+        {pins.map((pin) => {
+          if (pin.kind === "group") {
+            return (
+              <GroupPin
+                key={pin.id}
+                position={{ lat: pin.lat, lng: pin.lng }}
+                group={pin.group}
+                selected={pin.group.id === selectedId}
+                onSelect={onSelect}
+              />
+            );
+          }
+          if (pin.kind === "person") {
+            return (
+              <PersonPin
+                key={`person-${pin.id}`}
+                position={{ lat: pin.lat, lng: pin.lng }}
+                person={pin.person}
+              />
+            );
+          }
+          return (
+            <StatusPersonPin
+              key={`status-${pin.id}`}
               position={{ lat: pin.lat, lng: pin.lng }}
               person={pin.person}
             />
-          ),
-        )}
+          );
+        })}
       </GoogleMap>
 
+      {showPeopleAvailable && (
+        <button
+          type="button"
+          onClick={onToggleShowAllPeople}
+          aria-pressed={showAllPeople}
+          className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold shadow-[0_2px_8px_rgba(22,50,79,.18)] backdrop-blur transition-colors"
+          style={
+            showAllPeople
+              ? { background: "var(--brand-blue)", color: "#fff" }
+              : { background: "color-mix(in srgb, var(--surface) 92%, transparent)", color: "var(--muted)" }
+          }
+        >
+          <UsersIcon width={14} height={14} />
+          {showAllPeople ? "Showing people" : "Show people"}
+        </button>
+      )}
+
       {missing > 0 && (
-        <div className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[10.5px] font-bold text-[#5b7a97] backdrop-blur">
+        <div className="absolute bottom-3 left-3 rounded-full bg-[var(--surface)]/90 px-3 py-1 text-[11px] font-bold text-[var(--muted)] backdrop-blur">
           {missing} group{missing === 1 ? "" : "s"} missing a location — save
-          its address in the Console to place it on the map.
+          its address in the Directory to place it on the map.
         </div>
       )}
     </div>
   );
 }
 
-/** Fits/recenters the map whenever the visible points (groups + selected
- * person) change; falls back to the full DFW default view when nothing is
- * located yet. */
-function FitToPoints({ points }: { points: LatLng[] }) {
+/** Default view is always the full DFW bounds — the user zooms/pans
+ * manually from there while just browsing/filtering groups. The map only
+ * auto-zooms to fit specific points while a "Finding for" person is
+ * actively selected (`active`), since that's the one case where jumping to
+ * a relevant area is actually helpful rather than disorienting. */
+function FitToPoints({ points, active }: { points: LatLng[]; active: boolean }) {
   const map = useMap();
 
+  // Re-applied only when `active` flips (person selected/cleared) — never
+  // just because filters change, so manual zoom/pan is preserved while
+  // browsing.
   useEffect(() => {
-    if (!map) return;
+    if (!map || active) return;
+    map.fitBounds(DFW_BOUNDS);
+  }, [map, active]);
+
+  useEffect(() => {
+    if (!map || !active) return;
     if (points.length === 0) {
       map.fitBounds(DFW_BOUNDS);
       return;
@@ -188,7 +263,7 @@ function FitToPoints({ points }: { points: LatLng[] }) {
     const bounds = new google.maps.LatLngBounds();
     points.forEach((p) => bounds.extend(p));
     map.fitBounds(bounds, 60);
-  }, [map, points]);
+  }, [map, active, points]);
 
   return null;
 }
@@ -210,27 +285,35 @@ function GroupPin({
     <AdvancedMarker
       position={position}
       onClick={() => onSelect(group.id)}
-      zIndex={selected ? 30 : 10}
+      zIndex={selected ? 35 : 10}
       title={group.name}
     >
-      <span
-        className="flex h-[30px] w-[30px] items-center justify-center transition-transform duration-150"
-        style={{
-          background: c.solid,
-          borderRadius: "50% 50% 50% 0",
-          transform: `rotate(-45deg) scale(${selected ? 1.16 : 1})`,
-          boxShadow: selected
-            ? "0 8px 18px rgba(8,141,249,.42), 0 0 0 4px rgba(255,255,255,.95)"
-            : "0 3px 9px rgba(22,50,79,.3)",
-        }}
-      >
+      <div className="relative flex h-[44px] w-[44px] items-center justify-center">
+        {selected && (
+          <span
+            className="hw-pulse-ring"
+            style={{ width: 34, height: 34, background: c.solid, opacity: 0.55 }}
+          />
+        )}
         <span
-          className="text-[10.5px] font-extrabold text-white"
-          style={{ transform: "rotate(45deg)" }}
+          className="relative flex h-[30px] w-[30px] items-center justify-center transition-transform duration-150"
+          style={{
+            background: c.solid,
+            borderRadius: "50% 50% 50% 0",
+            transform: `rotate(-45deg) scale(${selected ? 1.32 : 1})`,
+            boxShadow: selected
+              ? "0 8px 20px rgba(8,141,249,.48), 0 0 0 4px rgba(255,255,255,.95)"
+              : "0 3px 9px rgba(22,50,79,.3)",
+          }}
         >
-          {initialsOf(group.name)}
+          <span
+            className="text-[11px] font-extrabold text-white"
+            style={{ transform: "rotate(45deg)" }}
+          >
+            {initialsOf(group.name)}
+          </span>
         </span>
-      </span>
+      </div>
     </AdvancedMarker>
   );
 }
@@ -238,20 +321,63 @@ function GroupPin({
 /** Distinct "you are here"-style pin for the person "Finding for" is set
  * to — a person silhouette (head + shoulders) in brand blue with the
  * person's initials in the head, so it never reads as just another group
- * teardrop. */
+ * teardrop or one of the status-colored roster pins below. */
 function PersonPin({ position, person }: { position: LatLng; person: Person }) {
   return (
     <AdvancedMarker position={position} zIndex={40} title={person.name}>
-      <div style={{ filter: "drop-shadow(0 3px 8px rgba(8,141,249,.45))" }}>
-        <svg width="32" height="38" viewBox="0 0 32 38" fill="none">
+      <div className="relative flex h-[52px] w-[46px] items-center justify-center">
+        <span
+          className="hw-pulse-ring"
+          style={{ width: 38, height: 38, background: "var(--brand-blue)", opacity: 0.5 }}
+        />
+        <div
+          className="relative"
+          style={{ filter: "drop-shadow(0 3px 8px rgba(8,141,249,.5))" }}
+        >
+          <svg width="36" height="42" viewBox="0 0 32 38" fill="none">
+            <path
+              d="M4 37c0-13 6-14 12-14s12 1 12 14z"
+              fill="var(--brand-blue)"
+              stroke="#fff"
+              strokeWidth="2.5"
+              strokeLinejoin="round"
+            />
+            <circle cx="16" cy="12" r="10.5" fill="var(--brand-blue)" stroke="#fff" strokeWidth="2.5" />
+            <text
+              x="16"
+              y="15.5"
+              textAnchor="middle"
+              fontSize="8.5"
+              fontWeight="800"
+              fill="#fff"
+            >
+              {initialsOf(person.name)}
+            </text>
+          </svg>
+        </div>
+      </div>
+    </AdvancedMarker>
+  );
+}
+
+/** A person shown because "Show people" is on — same silhouette shape as
+ * PersonPin but smaller, colored by their status instead of always blue,
+ * and with lower z-index so it never competes with the "Finding for" pin
+ * or a selected group pin. */
+function StatusPersonPin({ position, person }: { position: LatLng; person: Person }) {
+  const color = statusSolid(person.status);
+  return (
+    <AdvancedMarker position={position} zIndex={20} title={`${person.name} · ${person.status}`}>
+      <div style={{ filter: "drop-shadow(0 2px 5px rgba(22,50,79,.32))" }}>
+        <svg width="23" height="27" viewBox="0 0 32 38" fill="none">
           <path
             d="M4 37c0-13 6-14 12-14s12 1 12 14z"
-            fill="#088df9"
+            fill={color}
             stroke="#fff"
-            strokeWidth="2"
+            strokeWidth="2.5"
             strokeLinejoin="round"
           />
-          <circle cx="16" cy="12" r="10.5" fill="#088df9" stroke="#fff" strokeWidth="2" />
+          <circle cx="16" cy="12" r="10.5" fill={color} stroke="#fff" strokeWidth="2.5" />
           <text
             x="16"
             y="15.5"

@@ -9,7 +9,8 @@ export type LifeStage =
   | "Couples"
   | "Students";
 
-export type GroupStatus = "Active" | "Forming" | "Paused" | "Full";
+export type GroupStatus = "New" | "Open" | "Closed";
+export const GROUP_STATUSES: GroupStatus[] = ["New", "Open", "Closed"];
 export type PersonStatus =
   | "New"
   | "Actively Searching"
@@ -63,14 +64,15 @@ export interface Group {
   contactEmail: string;
   address: string; // PRIVATE — leaders only
   desc: string;
-  // Geo (populated by geocoding on save). Public map uses fuzzed point.
+  // Shown on the Finder card as "Placement Details" — practical notes for
+  // whoever is deciding whether to place someone here (steps to the door,
+  // parking, pets, etc.), distinct from `desc` (the public-facing blurb).
+  placementDetails: string;
+  // Geo (populated by geocoding on save).
   lat?: number | null;
   lng?: number | null;
-  publicLat?: number | null;
-  publicLng?: number | null;
-  // Fallback map position used before real geocoding (design mock %).
-  x?: number;
-  y?: number;
+  // Set by the DB trigger; used to detect a stale/conflicting save.
+  updatedAt?: string;
 }
 
 /** A person seeking placement — managed by coordinators. */
@@ -84,6 +86,10 @@ export interface Person {
   days: DayShort[];
   timePref: TimePref;
   life: LifeStage;
+  // Used to match against a Group's free-text `ageRange` (e.g. "24–32") in
+  // the Finder — see src/lib/ageRange.ts. Optional since not every existing
+  // record has it filled in yet.
+  age: number | null;
   interests: string;
   childcareNeeded: boolean;
   accessibility: string;
@@ -94,6 +100,8 @@ export interface Person {
   // Geo (populated by geocoding on save), same pattern as Group.
   lat?: number | null;
   lng?: number | null;
+  // Set by the DB trigger; used to detect a stale/conflicting save.
+  updatedAt?: string;
 }
 
 export const DAY_LONG: Record<DayShort, string> = {

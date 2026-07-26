@@ -29,12 +29,10 @@ function rowToGroup(r: any): Group {
     contactEmail: r.contact_email ?? "",
     address: r.address ?? "",
     desc: r.description ?? "",
+    placementDetails: r.placement_details ?? "",
     lat: r.lat,
     lng: r.lng,
-    publicLat: r.public_lat,
-    publicLng: r.public_lng,
-    x: r.x ?? undefined,
-    y: r.y ?? undefined,
+    updatedAt: r.updated_at,
   };
 }
 
@@ -46,6 +44,7 @@ function rowToPerson(r: any): Person {
     phone: r.phone ?? "",
     area: r.area,
     address: r.address ?? "",
+    age: r.age ?? null,
     days: r.days ?? [],
     timePref: r.time_pref,
     life: r.life,
@@ -58,6 +57,7 @@ function rowToPerson(r: any): Person {
     notes: r.notes ?? "",
     lat: r.lat,
     lng: r.lng,
+    updatedAt: r.updated_at,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

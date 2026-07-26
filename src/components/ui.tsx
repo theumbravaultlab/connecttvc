@@ -7,7 +7,7 @@ export function LifeTag({ life }: { life: LifeStage }) {
   const c = lifeColors(life);
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-[3px] text-[10.5px] font-extrabold"
+      className="inline-flex items-center rounded-full px-2 py-[3px] text-[11px] font-extrabold"
       style={{ background: c.tagBg, color: c.tagFg }}
     >
       {life}
@@ -37,7 +37,7 @@ export function SpotsPill({
   const s = spotsBadge(members, capacity);
   return (
     <span
-      className="inline-flex shrink-0 items-center rounded-full px-2.5 py-[3px] text-[10.5px] font-extrabold"
+      className="inline-flex shrink-0 items-center rounded-full px-2.5 py-[3px] text-[11px] font-extrabold"
       style={{ background: s.bg, color: s.fg }}
     >
       {s.label}
@@ -54,7 +54,7 @@ export function CapacityBar({
 }) {
   const pct = capacity > 0 ? Math.min(100, (members / capacity) * 100) : 0;
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#e6eef6]">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--divider-2)]">
       <div
         className="h-full rounded-full transition-[width] duration-200"
         style={{ width: `${pct}%`, background: capacityFill(members, capacity) }}
@@ -72,8 +72,8 @@ export function Avatar({
   size?: number;
   tone?: "blue" | "muted";
 }) {
-  const bg = tone === "blue" ? "#088df9" : "#dbe7f3";
-  const fg = tone === "blue" ? "#fff" : "#5b7a97";
+  const bg = tone === "blue" ? "var(--brand-blue)" : "var(--border)";
+  const fg = tone === "blue" ? "#fff" : "var(--muted)";
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded-full font-bold"
@@ -107,7 +107,7 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!on)}
       className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-      style={{ background: on ? "#088df9" : "#cfd9e3" }}
+      style={{ background: on ? "var(--brand-blue)" : "var(--border)" }}
     >
       <span
         className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-[left] duration-150"
@@ -120,11 +120,9 @@ export function Toggle({
 export function DayPills({
   value,
   onToggle,
-  multi = true,
 }: {
   value: DayShort[];
   onToggle: (d: DayShort) => void;
-  multi?: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -136,11 +134,11 @@ export function DayPills({
             type="button"
             aria-pressed={active}
             onClick={() => onToggle(d)}
-            className="rounded-full border px-2.5 py-1 text-[11.5px] font-bold transition-all duration-100"
+            className="rounded-full border px-2.5 py-1 text-[12px] font-bold transition-all duration-100"
             style={
               active
-                ? { background: "#088df9", color: "#fff", borderColor: "#088df9" }
-                : { background: "#fff", color: "#5b7a97", borderColor: "#dbe7f3" }
+                ? { background: "var(--brand-blue)", color: "#fff", borderColor: "var(--brand-blue)" }
+                : { background: "var(--surface)", color: "var(--muted)", borderColor: "var(--border)" }
             }
           >
             {d}
@@ -163,12 +161,12 @@ export function FieldLabel({
   return (
     <label
       htmlFor={htmlFor}
-      className="mb-1 flex items-center gap-1.5 text-[11.5px] font-bold text-[#8aa0b4]"
+      className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-[var(--faint)]"
     >
       {children}
       {tag && (
         <span
-          className="rounded-full px-1.5 py-[1px] text-[9.5px] font-bold"
+          className="rounded-full px-1.5 py-[1px] text-[10px] font-bold"
           style={{ background: "var(--amber-bg)", color: "var(--amber-fg)" }}
         >
           {tag}
@@ -179,7 +177,7 @@ export function FieldLabel({
 }
 
 const controlClass =
-  "w-full rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-3 py-2 text-[12.5px] font-semibold text-[#16324f] outline-none transition-colors focus:border-[#088df9]";
+  "w-full rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-3 py-2 text-[13px] font-semibold text-[var(--ink)] outline-none transition-colors focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30";
 
 export function TextInput(
   props: React.InputHTMLAttributes<HTMLInputElement>,
@@ -207,9 +205,9 @@ export function ReadOnlyValue({
   return (
     <div
       id={id}
-      className="flex w-full items-center rounded-[9px] border border-[#dbe7f3] bg-[#eef3f8] px-3 py-2 text-[12.5px] font-semibold text-[#5b7a97]"
+      className="flex w-full items-center rounded-[9px] border border-[var(--border)] bg-[var(--divider)] px-3 py-2 text-[13px] font-semibold text-[var(--muted)]"
     >
-      {value || <span className="text-[#8aa0b4]">{placeholder}</span>}
+      {value || <span className="text-[var(--faint)]">{placeholder}</span>}
     </div>
   );
 }

@@ -1,23 +1,38 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   DAY_LONG,
+  GROUP_STATUSES,
   LIFE_STAGES,
   initialsOf,
   type DayShort,
   type Group,
+  type GroupStatus,
   type Person,
 } from "@/lib/types";
+import { ageMatchesRange } from "@/lib/ageRange";
+import { lifeColors } from "@/lib/colors";
 import { Avatar, StatusPill } from "@/components/ui";
-import { SearchIcon, XIcon } from "@/components/icons";
+import {
+  CarIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  EditIcon,
+  PinIcon,
+  SearchIcon,
+  XIcon,
+} from "@/components/icons";
 import { getTravelTimesToGroups } from "@/app/actions";
 import type { TravelTime } from "@/lib/routes";
 import { FinderMap } from "./FinderMap";
 import { GroupCard } from "./GroupCard";
 import { PersonSearch } from "./PersonSearch";
 
-const DAY_FILTERS: (DayShort | "All")[] = ["All", "Mon", "Tue", "Wed", "Thu", "Sun"];
+const DAY_FILTERS: DayShort[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const EMPTY_TRAVEL_TIMES: Record<string, TravelTime> = {};
 
 export function Finder({
   groups,
@@ -27,19 +42,86 @@ export function Finder({
   /** Leader-only: enables the "Finding for" matcher. Empty for public. */
   people: Person[];
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [q, setQ] = useState("");
-  const [day, setDay] = useState<DayShort | "All">("All");
-  const [area, setArea] = useState("All");
+  const [days, setDays] = useState<Set<DayShort>>(new Set());
+  const [areas, setAreas] = useState<Set<string>>(new Set());
   const [life, setLife] = useState("All");
-  const [personId, setPersonId] = useState<string>("");
+  const [status, setStatus] = useState<GroupStatus | "All">("All");
+  // Picks up a deep-link from the Directory's "Find for" button
+  // (?person=<id>) directly in the initial state — searchParams and people
+  // are both already available synchronously at first render (this route
+  // is fully dynamic, so this even resolves correctly during SSR, not just
+  // after a client-side effect), so this needs no effect at all.
+  const [personId, setPersonId] = useState<string>(() => {
+    const paramPersonId = searchParams.get("person");
+    return paramPersonId && people.some((p) => p.id === paramPersonId) ? paramPersonId : "";
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
-  const [travelTimes, setTravelTimes] = useState<Record<string, TravelTime>>({});
+  // Tagged with the person it was fetched for, so switching to a person
+  // with no location (or whose matches all lack one) can never display an
+  // unrelated person's stale distances — simpler and more robust than
+  // clearing this back to empty via an effect on every person change.
+  const [travelTimes, setTravelTimes] = useState<{
+    personId: string;
+    times: Record<string, TravelTime>;
+  } | null>(null);
+  // Off by default — keeps the map uncluttered until a coordinator actually
+  // wants to see people on it. Persists across person/group selection
+  // changes (unlike the "matched on" toggles below), since it's a general
+  // map display preference, not part of any one search.
+  const [showAllPeople, setShowAllPeople] = useState(false);
   const findingForId = useId();
-  const areaId = useId();
   const lifeId = useId();
+  const statusId = useId();
+  const statusId2 = useId();
 
   const person = people.find((p) => p.id === personId) ?? null;
+  const effectiveTravelTimes =
+    travelTimes && travelTimes.personId === person?.id ? travelTimes.times : EMPTY_TRAVEL_TIMES;
+
+  // Cleans the URL after picking up a ?person= deep-link (see the personId
+  // initializer above) so a later refresh doesn't keep reapplying it. This
+  // is the one piece of the deep-link that's a genuine side effect (history
+  // navigation) rather than state — everything else already happened
+  // during the initial render, so this effect calls no setState at all.
+  useEffect(() => {
+    if (searchParams.get("person")) {
+      router.replace("/");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When finding for a specific person, each "matched on" criterion (their
+  // available days, city, life stage, age, childcare need) can be
+  // individually toggled off/back on to explore groups that wouldn't
+  // otherwise qualify — reset to "all active" whenever the selected person
+  // changes. Adjusted directly during render (React's documented pattern
+  // for "reset state when an id changes") rather than in an effect, using
+  // `prevPersonId` to detect the change — this avoids the extra render an
+  // effect-based reset would otherwise cause.
+  const [activeDays, setActiveDays] = useState<Set<DayShort>>(new Set());
+  const [areaActive, setAreaActive] = useState(true);
+  const [lifeActive, setLifeActive] = useState(true);
+  const [ageActive, setAgeActive] = useState(true);
+  const [childcareActive, setChildcareActive] = useState(true);
+  // "Other groups that might work" — collapsed by default so it doesn't add
+  // permanent visual weight; collapses again whenever the person changes.
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [prevPersonId, setPrevPersonId] = useState<string | null>(null);
+  if (person && person.id !== prevPersonId) {
+    setPrevPersonId(person.id);
+    setActiveDays(new Set(person.days));
+    setAreaActive(true);
+    setLifeActive(true);
+    setAgeActive(true);
+    setChildcareActive(true);
+    setShowSuggestions(false);
+  } else if (!person && prevPersonId !== null) {
+    setPrevPersonId(null);
+  }
 
   // Area is auto-derived from each address's city (no fixed list anymore),
   // so the filter's options come from whatever areas actually show up.
@@ -51,65 +133,131 @@ export function Finder({
   // Derived filtered list.
   const filtered = useMemo(() => {
     if (person) {
-      return groups.filter(
-        (g) => person.days.includes(g.day) && g.area === person.area,
-      );
+      return groups.filter((g) => {
+        if (status !== "All" && g.status !== status) return false;
+        if (activeDays.size > 0 && !activeDays.has(g.day)) return false;
+        if (areaActive && g.area !== person.area) return false;
+        if (lifeActive && g.life !== person.life) return false;
+        if (ageActive && !ageMatchesRange(person.age, g.ageRange)) return false;
+        if (childcareActive && person.childcareNeeded && !g.childcare) return false;
+        return true;
+      });
     }
     return groups.filter((g) => {
-      if (day !== "All" && g.day !== day) return false;
-      if (area !== "All" && g.area !== area) return false;
+      if (days.size > 0 && !days.has(g.day)) return false;
+      if (areas.size > 0 && !areas.has(g.area)) return false;
       if (life !== "All" && g.life !== life) return false;
+      if (status !== "All" && g.status !== status) return false;
       if (q.trim()) {
         const hay = `${g.name} ${g.area} ${g.host}`.toLowerCase();
         if (!hay.includes(q.trim().toLowerCase())) return false;
       }
       return true;
     });
-  }, [groups, person, day, area, life, q]);
+  }, [groups, person, days, areas, life, status, q, activeDays, areaActive, lifeActive, ageActive, childcareActive]);
 
-  // Auto-select the first match when the person or filter set changes.
-  useEffect(() => {
-    if (filtered.length === 0) {
-      setSelectedId(null);
-      return;
-    }
-    if (!filtered.some((g) => g.id === selectedId)) {
-      setSelectedId(filtered[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered]);
+  // When a city isn't narrowing the result (either the "Finding for"
+  // person's city match is toggled off, since areaActive already reuses the
+  // existing Routes API travel-time data computed for that person below),
+  // fall back to sorting by Google Maps drive distance, closest first, so
+  // the list stays useful without a city to anchor it.
+  const displayGroups = useMemo(() => {
+    if (!person || areaActive) return filtered;
+    return [...filtered].sort((a, b) => {
+      const ta = effectiveTravelTimes[a.id]?.minutes;
+      const tb = effectiveTravelTimes[b.id]?.minutes;
+      if (ta == null && tb == null) return 0;
+      if (ta == null) return 1;
+      if (tb == null) return -1;
+      return ta - tb;
+    });
+  }, [filtered, person, areaActive, effectiveTravelTimes]);
+
+  // Ranked "might still work" candidates — every group the strict match
+  // excludes, scored by how many of the currently-*active* "matched on"
+  // criteria it still satisfies (a toggled-off criterion never counts
+  // against a group, same as the strict filter above). Only meaningful in
+  // person-matched mode; empty otherwise. Capped at 6 so it stays a quick
+  // scan, not a second full list.
+  const suggestions = useMemo(() => {
+    if (!person) return [];
+    const criteria = (
+      [
+        activeDays.size > 0 && { key: "Day", satisfies: (g: Group) => activeDays.has(g.day) },
+        areaActive && { key: person.area || "City", satisfies: (g: Group) => g.area === person.area },
+        lifeActive && { key: person.life, satisfies: (g: Group) => g.life === person.life },
+        ageActive && { key: "Age", satisfies: (g: Group) => ageMatchesRange(person.age, g.ageRange) },
+        childcareActive && {
+          key: "Childcare",
+          satisfies: (g: Group) => !person.childcareNeeded || g.childcare,
+        },
+      ] as const
+    ).filter((c): c is { key: string; satisfies: (g: Group) => boolean } => !!c);
+    if (criteria.length === 0) return [];
+
+    const strictIds = new Set(filtered.map((g) => g.id));
+    return groups
+      .filter((g) => !strictIds.has(g.id))
+      .filter((g) => status === "All" || g.status === status)
+      .map((g) => ({
+        group: g,
+        metKeys: criteria.filter((c) => c.satisfies(g)).map((c) => c.key),
+        missedKeys: criteria.filter((c) => !c.satisfies(g)).map((c) => c.key),
+        score: criteria.filter((c) => c.satisfies(g)).length,
+      }))
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score || a.group.name.localeCompare(b.group.name))
+      .slice(0, 6);
+  }, [person, groups, filtered, status, activeDays, areaActive, lifeActive, ageActive, childcareActive]);
+
+  // Clear the selection if it falls out of the visible set (person or
+  // filter change) — never auto-picks a replacement. A selected suggestion
+  // counts as visible too, so opening one doesn't immediately deselect it.
+  // Adjusted directly during render rather than in an effect, same
+  // "prevPersonId" pattern as above, since this is really just another
+  // "reset when a derived value no longer applies" case.
+  const stillVisible =
+    filtered.some((g) => g.id === selectedId) || suggestions.some((s) => s.group.id === selectedId);
+  if (selectedId && !stillVisible) {
+    setSelectedId(null);
+  }
 
   // Drive time from the selected person to every visible group, batched
   // into one Routes API call. Depends on primitive lat/lng/id rather than
   // the `person` object itself so editing an unrelated field elsewhere
-  // (e.g. in the Console, since state is shared) doesn't trigger a refetch.
+  // (e.g. in the Directory, since state is shared) doesn't trigger a
+  // refetch. No synchronous setState here — an empty/no-destination case
+  // just skips the fetch and lets `effectiveTravelTimes` (above) keep any
+  // stale state from being shown, tagged-by-personId, rather than this
+  // effect needing to clear it itself.
   useEffect(() => {
-    if (!person || person.lat == null || person.lng == null) {
-      setTravelTimes({});
-      return;
-    }
-    const destinations = filtered
+    if (!person || person.lat == null || person.lng == null) return;
+    const candidates = [...filtered, ...suggestions.map((s) => s.group)].filter(
+      (g, i, arr) => arr.findIndex((x) => x.id === g.id) === i,
+    );
+    const destinations = candidates
       .filter((g): g is typeof g & { lat: number; lng: number } =>
         g.lat != null && g.lng != null,
       )
       .map((g) => ({ id: g.id, lat: g.lat, lng: g.lng }));
-    if (destinations.length === 0) {
-      setTravelTimes({});
-      return;
-    }
+    if (destinations.length === 0) return;
     let cancelled = false;
     getTravelTimesToGroups({ lat: person.lat, lng: person.lng }, destinations).then(
       (result) => {
-        if (!cancelled) setTravelTimes(result);
+        if (!cancelled) setTravelTimes({ personId: person.id, times: result });
       },
     );
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [person?.id, person?.lat, person?.lng, filtered]);
+  }, [person?.id, person?.lat, person?.lng, filtered, suggestions]);
 
-  // Scroll the selected card into view within the list container.
+  // Scroll the selected card to the top of the list container. Uses
+  // getBoundingClientRect rather than offsetTop, since offsetTop is relative
+  // to the nearest positioned ancestor (which may not be the scroll
+  // container at all here) and was scrolling the card out of view instead
+  // of to the top.
   const listRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   useEffect(() => {
@@ -117,7 +265,8 @@ export function Finder({
     const container = listRef.current;
     const card = cardRefs.current[selectedId];
     if (container && card) {
-      container.scrollTo({ top: card.offsetTop - 14, behavior: "smooth" });
+      const delta = card.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      container.scrollTo({ top: container.scrollTop + delta - 14, behavior: "smooth" });
     }
   }, [selectedId]);
 
@@ -126,19 +275,92 @@ export function Finder({
     setSelectedId(null);
   };
 
+  const toggleDay = (d: DayShort) =>
+    setDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d);
+      else next.add(d);
+      return next;
+    });
+
+  const toggleArea = (city: string) =>
+    setAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(city)) next.delete(city);
+      else next.add(city);
+      return next;
+    });
+
+  // Used by the search dropdown's "pick a city" suggestion — always adds
+  // (never removes), since a quick-jump lookup shouldn't accidentally
+  // deselect a city someone already chose via the City filter itself.
+  const selectArea = (city: string) => setAreas((prev) => new Set(prev).add(city));
+
+  // Only relevant in browse mode (no person selected) — the person-matched
+  // mode has its own "matched on" chips for broadening/narrowing instead.
+  const activeFilterCount =
+    (q.trim() ? 1 : 0) +
+    (days.size > 0 ? 1 : 0) +
+    (areas.size > 0 ? 1 : 0) +
+    (life !== "All" ? 1 : 0) +
+    (status !== "All" ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setQ("");
+    setDays(new Set());
+    setAreas(new Set());
+    setLife("All");
+    setStatus("All");
+  };
+
+  // Who shows up as a status-colored pin on the map when "Show people" is
+  // on: just the selected group's roster if one is selected, otherwise
+  // everyone. The "Finding for" person always keeps their own distinct
+  // pin (see FinderMap) so they're never duplicated into this set.
+  const statusPeople = useMemo(() => {
+    if (!showAllPeople) return [];
+    const base = selectedId ? people.filter((p) => p.group === selectedId) : people;
+    return person ? base.filter((p) => p.id !== person.id) : base;
+  }, [showAllPeople, selectedId, people, person]);
+
+  // The map normally only shows strict-match pins — but if a coordinator
+  // selects a suggested candidate (not part of the strict list), its pin
+  // still needs to render so "selected" actually means something there too.
+  const mapGroups = useMemo(() => {
+    const selectedSuggestion = suggestions.find((s) => s.group.id === selectedId)?.group;
+    if (selectedSuggestion && !displayGroups.some((g) => g.id === selectedSuggestion.id)) {
+      return [...displayGroups, selectedSuggestion];
+    }
+    return displayGroups;
+  }, [displayGroups, suggestions, selectedId]);
+
+  const statusSelect = (id: string, full?: boolean) => (
+    <select
+      id={id}
+      value={status}
+      onChange={(e) => setStatus(e.target.value as GroupStatus | "All")}
+      className={`rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-2.5 text-[12px] font-semibold text-[var(--ink)] outline-none transition-colors focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30 ${full ? "w-full py-2" : "py-1.5"}`}
+    >
+      <option value="All">All statuses</option>
+      {GROUP_STATUSES.map((s) => (
+        <option key={s}>{s}</option>
+      ))}
+    </select>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col md:flex-row">
         {/* mobile-only List / Map switch */}
-        <div className="flex shrink-0 gap-1 border-b border-[#eef3f8] px-3 py-2 md:hidden">
+        <div className="flex shrink-0 gap-1 border-b border-[var(--divider)] px-3 py-2 md:hidden">
           {(["list", "map"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setMobileView(v)}
-              className="flex-1 rounded-full px-4 py-1.5 text-[12.5px] font-bold capitalize transition-colors"
+              className="flex-1 rounded-full px-4 py-1.5 text-[13px] font-bold capitalize transition-colors"
               style={
                 mobileView === v
-                  ? { background: "#088df9", color: "#fff" }
-                  : { background: "#f2f6fb", color: "#5b7a97" }
+                  ? { background: "var(--brand-blue)", color: "#fff" }
+                  : { background: "var(--panel-4)", color: "var(--muted)" }
               }
             >
               {v}
@@ -148,15 +370,15 @@ export function Finder({
 
         {/* list column */}
         <div
-          className={`${mobileView === "list" ? "flex" : "hidden"} min-h-0 w-full flex-1 flex-col md:flex md:w-[380px] md:flex-none md:border-r md:border-[#eef3f8]`}
+          className={`${mobileView === "list" ? "flex" : "hidden"} min-h-0 w-full flex-1 flex-col md:flex md:w-[380px] md:flex-none md:border-r md:border-[var(--divider)]`}
         >
           {/* filter area */}
-          <div className="shrink-0 border-b border-[#eef3f8] px-[15px] py-3.5">
+          <div className="shrink-0 border-b border-[var(--divider)] px-[15px] py-3.5">
             {people.length > 0 && (
               <div className="mb-3">
                 <label
                   htmlFor={findingForId}
-                  className="mb-1 block text-[11.5px] font-extrabold uppercase tracking-wide text-[#8aa0b4]"
+                  className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-[var(--faint)]"
                 >
                   Finding for
                 </label>
@@ -174,102 +396,151 @@ export function Finder({
             )}
 
             {person ? (
-              <div className="rounded-xl border border-[#cfe3fb] bg-[#f2f8ff] p-3">
+              <div className="rounded-xl border border-[var(--border-accent)] bg-[var(--panel-2)] p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
                     <Avatar initials={initialsOf(person.name)} size={34} />
                     <div>
-                      <div className="flex items-center gap-1.5 text-[13px] font-bold text-[#16324f]">
+                      <div className="flex items-center gap-1.5 text-[13px] font-bold text-[var(--ink)]">
                         {person.name}
                         <StatusPill status={person.status} />
                       </div>
-                      <div className="text-[11.5px] font-semibold text-[#5b7a97]">
+                      <div className="text-[12px] font-semibold text-[var(--muted)]">
                         {person.notes.split(",")[0]} · lives in {person.area}
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={clearPerson}
-                    className="flex items-center gap-1 rounded-full px-2 py-1 text-[11.5px] font-bold text-[#088df9] hover:bg-white"
-                  >
-                    <XIcon width={12} height={12} /> Clear
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => router.push(`/directory/people/${person.id}`)}
+                      aria-label="Edit person details"
+                      className="flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-bold text-[var(--brand-blue)] hover:bg-[var(--surface)]"
+                    >
+                      <EditIcon width={12} height={12} /> Edit
+                    </button>
+                    <button
+                      onClick={clearPerson}
+                      className="flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-bold text-[var(--brand-blue)] hover:bg-[var(--surface)]"
+                    >
+                      <XIcon width={12} height={12} /> Clear
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-2.5 text-[11px] font-extrabold uppercase tracking-wide text-[#8aa0b4]">
-                  Matched on
+                <div className="mt-2.5 flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
+                    Matched on
+                  </span>
+                  <span className="text-[11px] font-semibold text-[var(--faint)]">
+                    Tap to include/exclude
+                  </span>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {person.days.map((d) => (
-                    <MatchChip key={d}>{DAY_LONG[d]}</MatchChip>
+                    <MatchChip
+                      key={d}
+                      active={activeDays.has(d)}
+                      onClick={() =>
+                        setActiveDays((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(d)) next.delete(d);
+                          else next.add(d);
+                          return next;
+                        })
+                      }
+                    >
+                      {DAY_LONG[d]}
+                    </MatchChip>
                   ))}
-                  <MatchChip>{person.area}</MatchChip>
-                  <MatchChip>{person.life}</MatchChip>
+                  <MatchChip active={areaActive} onClick={() => setAreaActive((v) => !v)}>
+                    {person.area}
+                  </MatchChip>
+                  <MatchChip active={lifeActive} onClick={() => setLifeActive((v) => !v)}>
+                    {person.life}
+                  </MatchChip>
+                  {person.age != null && (
+                    <MatchChip active={ageActive} onClick={() => setAgeActive((v) => !v)}>
+                      Age {person.age}
+                    </MatchChip>
+                  )}
+                  {person.childcareNeeded && (
+                    <MatchChip active={childcareActive} onClick={() => setChildcareActive((v) => !v)}>
+                      Needs childcare
+                    </MatchChip>
+                  )}
+                </div>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <label htmlFor={statusId2} className="sr-only">
+                    Filter by status
+                  </label>
+                  {statusSelect(statusId2)}
                 </div>
               </div>
             ) : (
               <div className="flex flex-col gap-2.5">
-                <div className="relative">
-                  <SearchIcon
-                    width={15}
-                    height={15}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8aa0b4]"
+                <GroupCitySearch
+                  query={q}
+                  onQueryChange={setQ}
+                  groups={groups}
+                  cityOptions={areaOptions}
+                  onSelectGroup={(id) => setSelectedId(id)}
+                  onSelectCity={(city) => selectArea(city)}
+                />
+
+                {activeFilterCount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[var(--faint)]">
+                      {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} applied
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearAllFilters}
+                      className="text-[12px] font-bold text-[var(--brand-blue)] hover:underline"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <DaysFilterPopover
+                    selected={days}
+                    onToggleDay={toggleDay}
+                    onClear={() => setDays(new Set())}
                   />
-                  <input
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder="Search groups or areas…"
-                    aria-label="Search groups or areas"
-                    className="w-full rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] py-2 pl-9 pr-3 text-[12.5px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"
+                  <CityFilterPopover
+                    selected={areas}
+                    options={areaOptions}
+                    onToggle={toggleArea}
+                    onClear={() => setAreas(new Set())}
                   />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {DAY_FILTERS.map((d) => {
-                    const active = day === d;
-                    return (
-                      <button
-                        key={d}
-                        onClick={() => setDay(d)}
-                        className="rounded-full border px-2.5 py-1 text-[11.5px] font-bold transition-all duration-100"
-                        style={
-                          active
-                            ? { background: "#088df9", color: "#fff", borderColor: "#088df9" }
-                            : { background: "#fff", color: "#5b7a97", borderColor: "#dbe7f3" }
-                        }
-                      >
-                        {d}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="flex gap-2">
-                  <label htmlFor={areaId} className="sr-only">
-                    Filter by area
-                  </label>
-                  <select
-                    id={areaId}
-                    value={area}
-                    onChange={(e) => setArea(e.target.value)}
-                    className="w-1/2 rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-2.5 py-2 text-[12px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"
-                  >
-                    <option value="All">All areas</option>
-                    {areaOptions.map((a) => (
-                      <option key={a}>{a}</option>
-                    ))}
-                  </select>
-                  <label htmlFor={lifeId} className="sr-only">
-                    Filter by life stage
-                  </label>
-                  <select
-                    id={lifeId}
-                    value={life}
-                    onChange={(e) => setLife(e.target.value)}
-                    className="w-1/2 rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-2.5 py-2 text-[12px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"
-                  >
-                    <option value="All">All stages</option>
-                    {LIFE_STAGES.map((l) => (
-                      <option key={l}>{l}</option>
-                    ))}
-                  </select>
+                  <div>
+                    <label
+                      htmlFor={lifeId}
+                      className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-[var(--faint)]"
+                    >
+                      Life stage
+                    </label>
+                    <select
+                      id={lifeId}
+                      value={life}
+                      onChange={(e) => setLife(e.target.value)}
+                      className="w-full rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-2.5 py-2 text-[12px] font-semibold text-[var(--ink)] outline-none transition-colors focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+                    >
+                      <option value="All">All stages</option>
+                      {LIFE_STAGES.map((l) => (
+                        <option key={l}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={statusId}
+                      className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-[var(--faint)]"
+                    >
+                      Status
+                    </label>
+                    {statusSelect(statusId, true)}
+                  </div>
                 </div>
               </div>
             )}
@@ -277,13 +548,15 @@ export function Finder({
 
           {/* list scroll */}
           <div ref={listRef} className="hw-scroll min-h-0 flex-1 overflow-y-auto p-3.5">
-            {filtered.length === 0 ? (
-              <div className="mt-10 px-4 text-center text-[13px] font-semibold text-[#8aa0b4]">
-                No groups match yet — try clearing a filter.
+            {displayGroups.length === 0 ? (
+              <div className="mt-10 px-4 text-center text-[13px] font-semibold text-[var(--faint)]">
+                {person && suggestions.length > 0
+                  ? "No exact matches — see other groups that might work below."
+                  : "No groups match yet — try clearing a filter."}
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {filtered.map((g, i) => (
+                {displayGroups.map((g, i) => (
                   <GroupCard
                     key={g.id}
                     ref={(el) => {
@@ -294,10 +567,47 @@ export function Finder({
                     selected={g.id === selectedId}
                     greatFit={!!person && g.life === person.life}
                     matchName={person?.name.split(" ")[0]}
-                    travelTime={travelTimes[g.id]}
+                    travelTime={effectiveTravelTimes[g.id]}
                     onSelect={() => setSelectedId(g.id)}
                   />
                 ))}
+              </div>
+            )}
+
+            {person && suggestions.length > 0 && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowSuggestions((v) => !v)}
+                  aria-expanded={showSuggestions}
+                  className="flex w-full items-center justify-between rounded-xl border border-dashed border-[var(--border)] px-3.5 py-2.5 text-left text-[12px] font-bold text-[var(--muted)] transition-colors hover:bg-[var(--panel-1)]"
+                >
+                  <span>
+                    {showSuggestions ? "Hide" : "Show"} {suggestions.length} more group
+                    {suggestions.length === 1 ? "" : "s"} that might work
+                  </span>
+                  <ChevronDownIcon
+                    width={14}
+                    height={14}
+                    className="shrink-0 transition-transform"
+                    style={{ transform: showSuggestions ? "rotate(180deg)" : undefined }}
+                  />
+                </button>
+                {showSuggestions && (
+                  <div className="mt-2 flex flex-col gap-2">
+                    {suggestions.map((s) => (
+                      <SuggestedGroupCard
+                        key={s.group.id}
+                        group={s.group}
+                        metKeys={s.metKeys}
+                        missedKeys={s.missedKeys}
+                        selected={s.group.id === selectedId}
+                        travelTime={effectiveTravelTimes[s.group.id]}
+                        onSelect={() => setSelectedId(s.group.id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -308,20 +618,505 @@ export function Finder({
           className={`${mobileView === "map" ? "block" : "hidden"} relative min-h-0 flex-1 md:block`}
         >
           <FinderMap
-            groups={filtered}
+            groups={mapGroups}
             person={person}
+            statusPeople={statusPeople}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            showAllPeople={showAllPeople}
+            onToggleShowAllPeople={() => setShowAllPeople((v) => !v)}
+            showPeopleAvailable={people.length > 0}
           />
         </div>
       </div>
   );
 }
 
-function MatchChip({ children }: { children: React.ReactNode }) {
+/** Compact "Day" filter — a single trigger button (showing a summary of the
+ * current selection) that opens a small popover of day toggles, instead of
+ * 8 always-visible pills competing with City/Life stage/Status for space. */
+function DaysFilterPopover({
+  selected,
+  onToggleDay,
+  onClear,
+}: {
+  selected: Set<DayShort>;
+  onToggleDay: (d: DayShort) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const label =
+    selected.size === 0
+      ? "Any day"
+      : selected.size === 1
+        ? DAY_LONG[[...selected][0]]
+        : `${selected.size} days`;
+
   return (
-    <span className="rounded-full bg-white px-2 py-[3px] text-[10.5px] font-bold text-[#5b7a97] ring-1 ring-[#cfe3fb]">
+    <div ref={rootRef} className="relative">
+      <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
+        Day
+      </label>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-1.5 rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-2.5 py-2 text-[12px] font-semibold text-[var(--ink)] outline-none transition-colors focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+        style={selected.size > 0 ? { borderColor: "var(--brand-blue)" } : undefined}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDownIcon
+          width={13}
+          height={13}
+          className="shrink-0 text-[var(--faint)] transition-transform"
+          style={{ transform: open ? "rotate(180deg)" : undefined }}
+        />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-[calc(100%+6px)] z-20 w-[230px] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[0_10px_30px_rgba(22,50,79,.2)]">
+          <div className="flex flex-wrap gap-1.5">
+            {DAY_FILTERS.map((d) => {
+              const active = selected.has(d);
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onToggleDay(d)}
+                  className="rounded-full border px-2.5 py-1 text-[12px] font-bold transition-all duration-100"
+                  style={
+                    active
+                      ? { background: "var(--brand-blue)", color: "#fff", borderColor: "var(--brand-blue)" }
+                      : { background: "var(--surface)", color: "var(--muted)", borderColor: "var(--border)" }
+                  }
+                >
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+          {selected.size > 0 && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="mt-2.5 text-[12px] font-bold text-[var(--brand-blue)] hover:underline"
+            >
+              Clear days
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Free-text lookup for the browse-mode search box — types still live-
+ * filter the list below exactly as before, but this layers an actual
+ * dropdown of matching group names and matching cities on top (same
+ * click-to-jump idiom as PersonSearch), instead of a plain text input with
+ * no visible feedback about what's actually matching. Picking a group
+ * selects it; picking a city adds it to the City filter. */
+function GroupCitySearch({
+  query,
+  onQueryChange,
+  groups,
+  cityOptions,
+  onSelectGroup,
+  onSelectCity,
+}: {
+  query: string;
+  onQueryChange: (v: string) => void;
+  groups: Group[];
+  cityOptions: string[];
+  onSelectGroup: (id: string) => void;
+  onSelectCity: (city: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const matchingCities = q ? cityOptions.filter((c) => c.toLowerCase().includes(q)).slice(0, 6) : [];
+  const matchingGroups = q
+    ? groups.filter((g) => g.name.toLowerCase().includes(q)).slice(0, 6)
+    : [];
+  const hasResults = matchingCities.length > 0 || matchingGroups.length > 0;
+
+  return (
+    <div ref={rootRef} className="relative">
+      <div className="relative">
+        <SearchIcon
+          width={15}
+          height={15}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--faint)]"
+        />
+        <input
+          value={query}
+          onChange={(e) => {
+            onQueryChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search groups or cities…"
+          aria-label="Search groups or cities"
+          className="w-full rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] py-2 pl-9 pr-8 text-[13px] font-semibold text-[var(--ink)] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+        />
+        {query.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onQueryChange("")}
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-[var(--faint)] hover:bg-[var(--panel-4)] hover:text-[var(--muted)]"
+          >
+            <XIcon width={12} height={12} />
+          </button>
+        )}
+      </div>
+      {open && q && (
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-[9px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_8px_20px_rgba(22,50,79,.14)]">
+          {hasResults ? (
+            <ul className="max-h-64 overflow-y-auto py-1">
+              {matchingCities.map((city) => (
+                <li key={`city-${city}`}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onSelectCity(city);
+                      onQueryChange("");
+                      setOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[var(--panel-2)]"
+                  >
+                    <PinIcon width={13} height={13} className="shrink-0 text-[var(--faint)]" />
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[var(--ink)]">
+                      {city}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
+                      City
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {matchingGroups.map((g) => (
+                <li key={`group-${g.id}`}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onSelectGroup(g.id);
+                      onQueryChange("");
+                      setOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[var(--panel-2)]"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[var(--ink)]">
+                      {g.name}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
+                      {g.area || "Group"}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="px-3 py-2 text-[12px] font-semibold text-[var(--faint)]">
+              No groups or cities match &quot;{query.trim()}&quot;.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Searchable, multiselect City filter — a plain <select> doesn't scale to
+ * ~39 cities, and a Days-style flat pill list would overflow badly at that
+ * count, so this adds a search box inside the popover on top of the same
+ * toggle-to-select idiom. */
+function CityFilterPopover({
+  selected,
+  options,
+  onToggle,
+  onClear,
+}: {
+  selected: Set<string>;
+  options: string[];
+  onToggle: (city: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Closes the popover and clears its search box in one place, so it's
+  // always fresh next time it's reopened rather than remembering whatever
+  // was last typed.
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const label =
+    selected.size === 0
+      ? "All cities"
+      : selected.size === 1
+        ? [...selected][0]
+        : `${selected.size} cities`;
+
+  const q = query.trim().toLowerCase();
+  const filteredOptions = q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
+
+  return (
+    <div ref={rootRef} className="relative">
+      <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
+        City
+      </label>
+      <button
+        type="button"
+        onClick={() => (open ? close() : setOpen(true))}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-1.5 rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-2.5 py-2 text-[12px] font-semibold text-[var(--ink)] outline-none transition-colors focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+        style={selected.size > 0 ? { borderColor: "var(--brand-blue)" } : undefined}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDownIcon
+          width={13}
+          height={13}
+          className="shrink-0 text-[var(--faint)] transition-transform"
+          style={{ transform: open ? "rotate(180deg)" : undefined }}
+        />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-[calc(100%+6px)] z-20 w-[240px] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_10px_30px_rgba(22,50,79,.2)]">
+          <div className="border-b border-[var(--divider)] p-2">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search cities…"
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--panel-1)] px-2 py-1.5 text-[12px] font-semibold text-[var(--ink)] outline-none focus:border-[var(--brand-blue)]"
+            />
+          </div>
+          <ul className="max-h-52 overflow-y-auto py-1">
+            {filteredOptions.length === 0 ? (
+              <li className="px-3 py-2 text-[12px] font-semibold text-[var(--faint)]">
+                No matching cities.
+              </li>
+            ) : (
+              filteredOptions.map((city) => {
+                const active = selected.has(city);
+                return (
+                  <li key={city}>
+                    <button
+                      type="button"
+                      onClick={() => onToggle(city)}
+                      aria-pressed={active}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] font-semibold hover:bg-[var(--panel-2)]"
+                      style={{ color: active ? "var(--brand-blue)" : "var(--ink)" }}
+                    >
+                      <span
+                        className="flex h-4 w-4 shrink-0 items-center justify-center rounded border"
+                        style={
+                          active
+                            ? { background: "var(--brand-blue)", borderColor: "var(--brand-blue)" }
+                            : { borderColor: "var(--border)" }
+                        }
+                      >
+                        {active && <CheckIcon width={10} height={10} className="text-white" />}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{city}</span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+          {selected.size > 0 && (
+            <div className="border-t border-[var(--divider)] p-2">
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-[12px] font-bold text-[var(--brand-blue)] hover:underline"
+              >
+                Clear cities
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A ranked "might still work" candidate — deliberately simpler than
+ * GroupCard (no expand-on-select detail view), since this is a secondary,
+ * capped-at-6 list: name, when/where, an optional travel-time badge, and a
+ * row of small chips showing exactly which active criteria it does and
+ * doesn't meet, so a coordinator can see at a glance why it's suggested
+ * despite not being a full match. */
+function SuggestedGroupCard({
+  group,
+  metKeys,
+  missedKeys,
+  selected,
+  travelTime,
+  onSelect,
+}: {
+  group: Group;
+  metKeys: string[];
+  missedKeys: string[];
+  selected: boolean;
+  travelTime?: TravelTime;
+  onSelect: () => void;
+}) {
+  const router = useRouter();
+  const c = lifeColors(group.life);
+  const dayLong = DAY_LONG[group.day] ?? group.day;
+
+  return (
+    <div
+      onClick={onSelect}
+      className="cursor-pointer overflow-hidden rounded-2xl transition-shadow"
+      style={{
+        background: selected ? "var(--card-selected)" : "var(--panel-1)",
+        boxShadow: selected ? "0 0 0 2px var(--brand-blue)" : "none",
+      }}
+    >
+      <div className="flex">
+        <div className="w-1.5 shrink-0 opacity-50" style={{ background: c.solid }} />
+        <div className="min-w-0 flex-1 px-3.5 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="min-w-0 truncate font-[family-name:var(--font-fredoka)] text-[14px] font-semibold text-[var(--ink)]">
+              {group.name}
+            </h4>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(`/directory/groups/${group.id}`);
+              }}
+              aria-label="Edit group details"
+              className="shrink-0 rounded-md p-1 text-[var(--faint)] transition-colors hover:bg-[var(--panel-4)] hover:text-[var(--brand-blue)]"
+            >
+              <EditIcon width={13} height={13} />
+            </button>
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-semibold text-[var(--muted)]">
+            <span className="flex min-w-0 items-center gap-1.5 truncate">
+              <ClockIcon width={12} height={12} className="shrink-0" />
+              {dayLong}s · {group.time} · {group.area}
+            </span>
+            {travelTime && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--panel-2)] px-2 py-[2px] text-[10.5px] font-bold text-[var(--brand-blue)]">
+                <CarIcon width={11} height={11} />
+                {travelTime.text}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {metKeys.map((k) => (
+              <span
+                key={k}
+                className="flex items-center gap-1 rounded-full bg-[oklch(0.95_0.06_150)] px-2 py-[2px] text-[10.5px] font-bold text-[oklch(0.44_0.13_150)]"
+              >
+                <CheckIcon width={9} height={9} /> {k}
+              </span>
+            ))}
+            {missedKeys.map((k) => (
+              <span
+                key={k}
+                className="flex items-center gap-1 rounded-full bg-[var(--divider)] px-2 py-[2px] text-[10.5px] font-bold text-[var(--faint)]"
+              >
+                <XIcon width={9} height={9} /> {k}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A "matched on" criterion — click to exclude it from matching (and
+ * click again to bring it back), so a coordinator can broaden or narrow
+ * the search for other groups that might still work. */
+function MatchChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className="rounded-full px-2 py-[3px] text-[11px] font-bold transition-colors"
+      style={
+        active
+          ? { background: "var(--surface)", color: "var(--muted)", boxShadow: "inset 0 0 0 1px var(--border-accent)" }
+          : {
+              background: "var(--divider)",
+              color: "var(--faint)",
+              boxShadow: "inset 0 0 0 1px var(--divider)",
+            }
+      }
+    >
       {children}
-    </span>
+    </button>
   );
 }

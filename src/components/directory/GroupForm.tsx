@@ -1,9 +1,8 @@
 "use client";
 
-import { DAYS, LIFE_STAGES, type Group } from "@/lib/types";
+import { DAYS, GROUP_STATUSES, LIFE_STAGES, type Group } from "@/lib/types";
 import {
   CapacityBar,
-  FieldLabel,
   ReadOnlyValue,
   SelectInput,
   StatusPill,
@@ -31,10 +30,10 @@ export function GroupForm({
       <div className="mb-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="font-[family-name:var(--font-fredoka)] text-[21px] font-semibold text-[#16324f]">
+            <h2 className="font-[family-name:var(--font-fredoka)] text-[21px] font-semibold text-[var(--ink)]">
               {group.name || "Untitled group"}
             </h2>
-            <p className="text-[12px] font-semibold text-[#8aa0b4]">
+            <p className="text-[12px] font-semibold text-[var(--faint)]">
               Editing group details
             </p>
           </div>
@@ -44,14 +43,14 @@ export function GroupForm({
           <div className="flex-1">
             <CapacityBar members={group.members} capacity={group.capacity} />
           </div>
-          <span className="text-[11.5px] font-bold text-[#5b7a97]">
+          <span className="text-[12px] font-bold text-[var(--muted)]">
             {spotsLabel}
           </span>
         </div>
       </div>
 
       <SectionHeading>Basics</SectionHeading>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field full label="Group name">
           <TextInput
             value={group.name}
@@ -70,10 +69,16 @@ export function GroupForm({
             onChange={(e) => onPatch({ desc: e.target.value })}
           />
         </Field>
+        <Field full label="Placement details" tag="Shown on the Finder card">
+          <TextArea
+            value={group.placementDetails}
+            onChange={(e) => onPatch({ placementDetails: e.target.value })}
+          />
+        </Field>
       </div>
 
       <SectionHeading>When &amp; where</SectionHeading>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Meeting day">
           <SelectInput
             value={group.day}
@@ -124,20 +129,20 @@ export function GroupForm({
             placeholder="Start typing an address…"
           />
         </Field>
-        <Field label="Area">
+        <Field label="City">
           <ReadOnlyValue value={group.area} placeholder="From address" />
         </Field>
       </div>
 
       <SectionHeading>Leadership</SectionHeading>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Host(s)">
           <TextInput
             value={group.host}
             onChange={(e) => onPatch({ host: e.target.value })}
           />
         </Field>
-        <Field label="Co-leader">
+        <Field label="Mentor(s)">
           <TextInput
             value={group.coHost}
             onChange={(e) => onPatch({ coHost: e.target.value })}
@@ -153,7 +158,7 @@ export function GroupForm({
       </div>
 
       <SectionHeading>Capacity &amp; fit</SectionHeading>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Life stage">
           <SelectInput
             value={group.life}
@@ -193,7 +198,7 @@ export function GroupForm({
               onChange={(v) => onPatch({ childcare: v })}
               label="Childcare available"
             />
-            <span className="text-[12px] font-semibold text-[#5b7a97]">
+            <span className="text-[12px] font-semibold text-[var(--muted)]">
               {group.childcare ? "Yes" : "No"}
             </span>
           </div>
@@ -203,7 +208,7 @@ export function GroupForm({
             value={group.status}
             onChange={(e) => onPatch({ status: e.target.value as Group["status"] })}
           >
-            {["Active", "Forming", "Paused", "Full"].map((s2) => (
+            {GROUP_STATUSES.map((s2) => (
               <option key={s2}>{s2}</option>
             ))}
           </SelectInput>

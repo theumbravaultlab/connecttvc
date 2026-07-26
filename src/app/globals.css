@@ -2,28 +2,124 @@
 
 /* ============================================================
    Connect TVC design tokens (from design handoff)
+
+   Light values are UNCHANGED from before dark mode existed — every
+   component already used these exact hex values directly rather than
+   these tokens (e.g. `text-[#16324f]` instead of `text-[var(--ink)]`),
+   so light mode had to stay pixel-identical while every one of those
+   literals got swapped for a var() reference. Colors that don't need to
+   invert between themes (brand blue, brand-blue-light borders, and every
+   oklch() life-stage/status hue in colors.ts) were deliberately left as
+   literals — those are self-contained badge/pill colors with their own
+   built-in contrast, a common and acceptable dark-mode pattern, and
+   tokenizing them would have meant touching dozens more call sites for
+   zero visual change.
    ============================================================ */
 :root {
   --brand-blue: #088df9;
   --brand-blue-light: #a3cbfc;
-  --white: #ffffff;
+  --brand-blue-dark: #0b7fe0;
 
+  /* Text hierarchy: dark-on-light in light mode, light-on-dark in dark.
+     --muted and --faint are darkened from the original design handoff
+     values (#5b7a97 / #8aa0b4) — those measured ~4.49:1 and ~2.7:1 against
+     --surface, both under WCAG AA's 4.5:1 for normal text. These measure
+     ~5.6:1 and ~4.5:1 respectively, so --faint still reads lighter than
+     --muted (hierarchy preserved) while both actually pass AA now. Dark
+     mode's values already passed comfortably (~7.9:1 / ~5.2:1) and are
+     unchanged. */
   --ink: #16324f;
-  --muted: #5b7a97;
-  --faint: #8aa0b4;
+  --muted: #4f6b85;
+  --faint: #5f7992;
   --body-detail: #4a6076;
 
+  /* Surfaces: outer app background, card/panel backgrounds (lightest to
+     most-tinted), borders and dividers. */
   --page-bg: #e7eef6;
+  --surface: #ffffff;
   --panel-1: #f7fafd;
   --panel-2: #f2f8ff;
   --panel-3: #eef6ff;
+  --panel-4: #f2f6fb;
   --border: #dbe7f3;
+  --border-accent: #cfe3fb;
   --divider: #eef3f8;
   --divider-2: #e6eef6;
   --card-selected: #f4f8ff;
 
+  /* Demo-mode / warning banner. --amber-fg darkened from #c78a2e (~2.7:1
+     against --amber-bg, failing AA) to ~5.3:1. */
   --amber-bg: #fdf3e2;
-  --amber-fg: #c78a2e;
+  --amber-fg: #8a5c1e;
+  --amber-border: #f2e6c9;
+
+  --scrollbar-thumb: #cddcec;
+
+  /* Card elevation shadow — used by login/error cards. Light: a soft, low
+     ambient shadow; dark: shadows read poorly tinted on dark backgrounds,
+     so this uses a stronger neutral-black shadow instead. */
+  --shadow-card: 0 12px 32px rgba(22, 50, 79, 0.14);
+}
+
+:root[data-theme="dark"] {
+  --ink: #e7eef6;
+  --muted: #9fb3c8;
+  --faint: #7791a8;
+  --body-detail: #c3d1de;
+
+  --page-bg: #0b1622;
+  --surface: #101d2c;
+  --panel-1: #16243a;
+  --panel-2: #14283f;
+  --panel-3: #122840;
+  --panel-4: #182a40;
+  --border: #2a3f58;
+  --border-accent: #2f5375;
+  --divider: #22344a;
+  --divider-2: #24384f;
+  --card-selected: #17304c;
+
+  --amber-bg: #3a2e12;
+  --amber-fg: #e8b04d;
+  --amber-border: #4a3a18;
+
+  --scrollbar-thumb: #2a3f58;
+
+  --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+/* Falls back to the OS preference before the user picks explicitly —
+   ThemeProvider (src/components/ThemeProvider.tsx) stamps data-theme on
+   <html> once it reads a stored choice, or leaves it unset to defer to
+   this media query. data-theme (set explicitly, either direction) always
+   wins over the media query since it's a more specific selector. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #e7eef6;
+    --muted: #9fb3c8;
+    --faint: #7791a8;
+    --body-detail: #c3d1de;
+
+    --page-bg: #0b1622;
+    --surface: #101d2c;
+    --panel-1: #16243a;
+    --panel-2: #14283f;
+    --panel-3: #122840;
+    --panel-4: #182a40;
+    --border: #2a3f58;
+    --border-accent: #2f5375;
+    --divider: #22344a;
+    --divider-2: #24384f;
+    --card-selected: #17304c;
+
+    --amber-bg: #3a2e12;
+    --amber-fg: #e8b04d;
+    --amber-border: #4a3a18;
+
+    --scrollbar-thumb: #2a3f58;
+
+    --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.55);
+  }
 }
 
 @theme inline {
@@ -50,11 +146,61 @@ body {
   color: var(--ink);
   font-family: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  color-scheme: light dark;
 }
 
 /* Thin, soft scrollbars inside list panels */
 .hw-scroll::-webkit-scrollbar { width: 10px; }
 .hw-scroll::-webkit-scrollbar-thumb {
-  background: #cddcec; border-radius: 999px; border: 3px solid transparent; background-clip: padding-box;
+  background: var(--scrollbar-thumb); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box;
 }
 .hw-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Radar-style ping behind the selected group pin / the "Finding for" person
+   pin on the map, so the currently-relevant pin is unmistakable even with
+   the status-colored people layer on. */
+@keyframes hw-map-pulse {
+  0% { transform: scale(0.55); opacity: 0.55; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.hw-pulse-ring {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 9999px;
+  animation: hw-map-pulse 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hw-pulse-ring {
+    animation: none;
+    opacity: 0.4;
+  }
+}
+
+/* Printing/exporting a PDF should always look like the light theme,
+   regardless of the viewer's current dark-mode state — a dark-mode page
+   background printed as-is either wastes ink or (if the printer skips
+   background colors) leaves dark text with nothing to contrast against. */
+@media print {
+  :root {
+    --page-bg: #ffffff !important;
+    --surface: #ffffff !important;
+    --ink: #16324f !important;
+    --muted: #4f6b85 !important;
+    --faint: #5f7992 !important;
+    --body-detail: #4a6076 !important;
+    --panel-1: #f7fafd !important;
+    --panel-2: #f2f8ff !important;
+    --panel-3: #eef6ff !important;
+    --panel-4: #f2f6fb !important;
+    --border: #dbe7f3 !important;
+    --border-accent: #cfe3fb !important;
+    --divider: #eef3f8 !important;
+    --divider-2: #e6eef6 !important;
+    --card-selected: #f4f8ff !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}

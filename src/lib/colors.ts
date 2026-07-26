@@ -28,11 +28,9 @@ export function lifeColors(life: LifeStage) {
 // Status hues shared by group + person status pills.
 const STATUS_HUE: Record<string, number> = {
   // groups
-  Active: 150,
-  Forming: 235,
-  Paused: 70,
-  Full: 20,
-  // people
+  Open: 150,
+  Closed: 20,
+  // people (New is also a group status; same hue for both)
   New: 235,
   "Actively Searching": 70,
   Waitlisted: 35,
@@ -47,19 +45,27 @@ export function statusColors(status: GroupStatus | PersonStatus) {
   };
 }
 
+/** Vivid, single-color fill for a status-colored map pin — same hue as
+ * statusColors(), just at pin-fill lightness/chroma instead of pill
+ * background/foreground. */
+export function statusSolid(status: GroupStatus | PersonStatus): string {
+  const h = STATUS_HUE[status] ?? 235;
+  return `oklch(0.62 0.15 ${h})`;
+}
+
 /** Capacity bar fill: blue < 80%, amber 80–99%, red at 100%. */
 export function capacityFill(members: number, capacity: number): string {
   const pct = capacity > 0 ? members / capacity : 0;
   if (pct >= 1) return "oklch(0.62 0.15 20)";
   if (pct >= 0.8) return "oklch(0.7 0.14 70)";
-  return "#088df9";
+  return "var(--brand-blue)";
 }
 
 /** Spots-open pill styling + label. */
 export function spotsBadge(members: number, capacity: number) {
   const open = Math.max(0, capacity - members);
   if (open <= 0) {
-    return { label: "Group full", bg: "#eef2f6", fg: "#93a6b8", open: 0 };
+    return { label: "Group full", bg: "var(--divider)", fg: "var(--muted)", open: 0 };
   }
   return {
     label: `${open} spots open`,

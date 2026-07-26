@@ -55,11 +55,11 @@ create table if not exists public.groups (
   name text not null default 'New Home Group',
   day text not null default 'Tue',
   time text not null default '7:00 PM',
-  area text not null default 'Eastside',
+  area text not null default '',
   host text default '',
   co_host text default '—',
   life text not null default 'Everyone',
-  status text not null default 'Forming',
+  status text not null default 'New',
   format text not null default 'In-person',
   freq text not null default 'Weekly',
   capacity int not null default 12,
@@ -71,6 +71,7 @@ create table if not exists public.groups (
   contact_email text default '',
   address text default '',            -- PRIVATE: exact home address
   description text default '',
+  placement_details text default '',  -- shown on the Finder card as "Placement Details"
   lat double precision,               -- PRIVATE: exact geocoded point
   lng double precision,
   public_lat double precision,        -- fuzzed point safe for the public map
@@ -87,8 +88,9 @@ create table if not exists public.people (
   name text not null default 'New Member',
   email text default '',
   phone text default '',
-  area text not null default 'Eastside',
+  area text not null default '',
   address text default '',            -- PRIVATE: home address (for routing/map)
+  age integer,                        -- matched against groups.age_range in the Finder
   days text[] not null default '{}',
   time_pref text not null default 'Flexible',
   life text not null default 'Everyone',
@@ -158,7 +160,7 @@ with (security_invoker = off) as
     coalesce(public_lng, lng) as lng,
     x, y
   from public.groups
-  where status <> 'Paused';
+  where status <> 'Closed';
 
 grant select on public.public_groups to anon, authenticated;
 

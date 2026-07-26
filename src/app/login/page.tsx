@@ -30,26 +30,26 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#e7eef6] p-6">
+    <main className="flex min-h-dvh items-center justify-center bg-[var(--page-bg)] p-6">
       <div
-        className="w-full max-w-[400px] rounded-[22px] border border-[#dbe7f3] bg-white p-8"
+        className="w-full max-w-[400px] rounded-[22px] border border-[var(--border)] bg-[var(--surface)] p-8"
         style={{ boxShadow: "var(--shadow-card)" }}
       >
         <div className="mb-5 flex items-center gap-2.5">
           <HomeMark />
-          <span className="font-[family-name:var(--font-fredoka)] text-[20px] font-semibold text-[#16324f]">
+          <span className="font-[family-name:var(--font-fredoka)] text-[20px] font-semibold text-[var(--ink)]">
             Connect TVC
           </span>
         </div>
-        <h1 className="font-[family-name:var(--font-fredoka)] text-[21px] font-semibold text-[#16324f]">
+        <h1 className="font-[family-name:var(--font-fredoka)] text-[21px] font-semibold text-[var(--ink)]">
           Sign in
         </h1>
-        <p className="mt-1 text-[13px] font-semibold text-[#8aa0b4]">
+        <p className="mt-1 text-[13px] font-semibold text-[var(--faint)]">
           For authorized coordinators and group leaders.
         </p>
 
         {!supabaseConfigured ? (
-          <div className="mt-5 rounded-xl bg-[#fdf9ef] p-4 text-[12.5px] font-semibold leading-relaxed text-[#a9812f]">
+          <div className="mt-5 rounded-xl bg-[var(--amber-bg)] p-4 text-[13px] font-semibold leading-relaxed text-[var(--amber-fg)]">
             Sign-in turns on once Supabase keys are added to{" "}
             <code>.env.local</code>.
           </div>
@@ -62,7 +62,7 @@ export default function LoginPage() {
             }}
           >
             <div>
-              <label className="mb-1 block text-[11.5px] font-bold text-[#8aa0b4]">
+              <label className="mb-1 block text-[12px] font-bold text-[var(--faint)]">
                 Email
               </label>
               <input
@@ -71,11 +71,11 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
                 placeholder="you@church.org"
-                className="w-full rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-3 py-2.5 text-[13px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"
+                className="w-full rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-3 py-2.5 text-[13px] font-semibold text-[var(--ink)] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11.5px] font-bold text-[#8aa0b4]">
+              <label className="mb-1 block text-[12px] font-bold text-[var(--faint)]">
                 Password
               </label>
               <input
@@ -84,7 +84,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 placeholder="••••••••"
-                className="w-full rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-3 py-2.5 text-[13px] font-semibold text-[#16324f] outline-none focus:border-[#088df9]"
+                className="w-full rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-3 py-2.5 text-[13px] font-semibold text-[var(--ink)] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
               />
             </div>
             {error && (
@@ -95,11 +95,11 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !email || !password}
-              className="rounded-full bg-[#088df9] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#0b7fe0] disabled:opacity-50"
+              className="rounded-full bg-[var(--brand-blue)] px-5 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[var(--brand-blue-dark)] disabled:opacity-50"
             >
               {loading ? "Signing in…" : "Sign in"}
             </button>
-            <p className="text-[11.5px] font-semibold text-[#8aa0b4]">
+            <p className="text-[12px] font-semibold text-[var(--faint)]">
               Accounts are created by an administrator. Contact your coordinator
               if you need access.
             </p>

@@ -21,7 +21,7 @@ function extractCity(components: google.maps.places.AddressComponent[] | undefin
 }
 
 const controlClass =
-  "w-full rounded-[9px] border border-[#dbe7f3] bg-[#f7fafd] px-3 py-2 text-[12.5px] font-semibold text-[#16324f] outline-none transition-colors focus:border-[#088df9]";
+  "w-full rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-3 py-2 text-[13px] font-semibold text-[var(--ink)] outline-none transition-colors focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30";
 
 /**
  * Address text input with Google Places autocomplete suggestions. Uses the
@@ -160,15 +160,15 @@ export function AddressAutocomplete({
         className={controlClass}
       />
       {open && suggestions.length > 0 && (
-        <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-[9px] border border-[#dbe7f3] bg-white py-1 shadow-[0_8px_20px_rgba(22,50,79,.14)]">
+        <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-[9px] border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[0_8px_20px_rgba(22,50,79,.14)]">
           {suggestions.map((s, i) => (
             <li key={s.placeId}>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => selectSuggestion(s)}
-                className="block w-full px-3 py-2 text-left text-[12.5px] font-semibold text-[#16324f]"
-                style={{ background: i === highlighted ? "#f2f8ff" : "#fff" }}
+                className="block w-full px-3 py-2 text-left text-[13px] font-semibold text-[var(--ink)]"
+                style={{ background: i === highlighted ? "var(--panel-2)" : "var(--surface)" }}
               >
                 {s.text}
               </button>

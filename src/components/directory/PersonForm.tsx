@@ -13,7 +13,6 @@ import {
   DayPills,
   ReadOnlyValue,
   SelectInput,
-  StatusPill,
   TextArea,
   TextInput,
   Toggle,
@@ -43,23 +42,20 @@ export function PersonForm({
   return (
     <div>
       {/* form header */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Avatar initials={initialsOf(person.name)} size={40} />
-          <div>
-            <h2 className="font-[family-name:var(--font-fredoka)] text-[21px] font-semibold text-[#16324f]">
-              {person.name || "New member"}
-            </h2>
-            <p className="text-[12px] font-semibold text-[#8aa0b4]">
-              Group · {groupName}
-            </p>
-          </div>
+      <div className="mb-4 flex items-center gap-3">
+        <Avatar initials={initialsOf(person.name)} size={40} />
+        <div>
+          <h2 className="font-[family-name:var(--font-fredoka)] text-[21px] font-semibold text-[var(--ink)]">
+            {person.name || "New member"}
+          </h2>
+          <p className="text-[12px] font-semibold text-[var(--faint)]">
+            Group · {groupName}
+          </p>
         </div>
-        <StatusPill status={person.status} />
       </div>
 
       <SectionHeading>Contact</SectionHeading>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field full label="Full name">
           <TextInput
             value={person.name}
@@ -83,7 +79,7 @@ export function PersonForm({
       </div>
 
       <SectionHeading>Location &amp; availability</SectionHeading>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Time preference">
           <SelectInput
             value={person.timePref}
@@ -109,13 +105,13 @@ export function PersonForm({
             placeholder="Start typing an address…"
           />
         </Field>
-        <Field label="Home area">
+        <Field label="Home city">
           <ReadOnlyValue value={person.area} placeholder="From address" />
         </Field>
       </div>
 
       <SectionHeading>Fit</SectionHeading>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Life stage">
           <SelectInput
             value={person.life}
@@ -126,6 +122,15 @@ export function PersonForm({
             ))}
           </SelectInput>
         </Field>
+        <Field label="Age" tag="Matched against a group's age range">
+          <TextInput
+            type="number"
+            min={0}
+            max={120}
+            value={person.age ?? ""}
+            onChange={(e) => onPatch({ age: e.target.value ? Number(e.target.value) : null })}
+          />
+        </Field>
         <Field label="Childcare needed">
           <div className="flex items-center gap-2 pt-1">
             <Toggle
@@ -133,7 +138,7 @@ export function PersonForm({
               onChange={(v) => onPatch({ childcareNeeded: v })}
               label="Childcare needed"
             />
-            <span className="text-[12px] font-semibold text-[#5b7a97]">
+            <span className="text-[12px] font-semibold text-[var(--muted)]">
               {person.childcareNeeded ? "Yes" : "No"}
             </span>
           </div>
@@ -153,7 +158,7 @@ export function PersonForm({
       </div>
 
       <SectionHeading>Assignment</SectionHeading>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Status">
           <SelectInput
             value={person.status}
@@ -186,8 +191,8 @@ export function PersonForm({
           </SelectInput>
         </Field>
         {person.status === "Grouped" && person.group && (
-          <div className="w-full rounded-xl bg-[#fdf9ef] px-3 py-2.5 text-[12px] font-semibold text-[#a9812f]">
-            Tip: "Current members" on {groupName} is tracked separately — if
+          <div className="sm:col-span-2 rounded-xl bg-[var(--amber-bg)] px-3 py-2.5 text-[12px] font-semibold text-[var(--amber-fg)]">
+            Tip: &quot;Current members&quot; on {groupName} is tracked separately — if
             this is a new permanent placement, update it on the Groups tab too.
           </div>
         )}

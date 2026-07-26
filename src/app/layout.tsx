@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Fredoka, Nunito } from "next/font/google";
+import Script from "next/script";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 const fredoka = Fredoka({
@@ -17,7 +19,7 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: "Connect TVC — Home Groups",
   description:
-    "Find and manage home groups: coordinator map + console for Connect TVC.",
+    "Find and manage home groups: coordinator map + directory for Connect TVC.",
 };
 
 export default function RootLayout({
@@ -29,8 +31,29 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${fredoka.variable} ${nunito.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* Restores an explicit light/dark override before hydration, so
+         * there's no flash back to the OS-preference default on load. If
+         * there's no stored override, this does nothing on purpose —
+         * globals.css's prefers-color-scheme media query already renders
+         * the right theme on the very first paint with zero JS needed.
+         * beforeInteractive + root layout is required for this to run
+         * before hydration — a plain <script> tag renders as inert markup
+         * under React and never executes. */}
+        <Script
+          id="theme-restore"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `try {
+  var t = localStorage.getItem("connect-tvc-theme");
+  if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+} catch (e) {}`,
+          }}
+        />
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
