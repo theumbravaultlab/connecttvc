@@ -33,10 +33,37 @@ partway through (see Rebrand section).
   tool using the launch config named **`connect-tvc`** (defined in both
   `C:\Users\dchur\.claude\launch.json` and the project's own
   `.claude/launch.json`)
-- **Git:** real commit history exists (see Git History below). It was
-  entirely uncommitted until a full review caught this — always commit
-  meaningful chunks of work now.
-- **No production deployment yet.** This only runs locally / in dev so far.
+- **Git:** [github.com/theumbravaultlab/connecttvc](https://github.com/theumbravaultlab/connecttvc)
+  (`origin`, branch `master`). Real commit history exists (see Git History
+  below) — it was entirely uncommitted until a full review caught this
+  early on; always commit meaningful chunks of work now.
+- **Live in production:** [connecttvc.vercel.app](https://connecttvc.vercel.app),
+  deployed via Vercel, connected directly to the GitHub repo.
+  **Every push to `master` deploys straight to production — there is no
+  staging/preview gate.** The user has said they'll be pushing live changes
+  going forward. This means: always run a real `npm run build` (not just
+  dev-mode `tsc`/`eslint`, which don't catch everything a production build
+  does — this bit us once already, see Known Issues) before pushing
+  anything, and always confirm with the user before pushing per the
+  standing git-safety rules, since a push here is never a "just testing"
+  action.
+- **The Supabase project used throughout dev *is* production** (the user's
+  explicit call — see "Product direction" above) — sample/seed data will
+  be cleared from it when ready for real coordinators, not swapped to a
+  separate project. `005_sample_data_dfw.sql` (the destructive bulk
+  sample-data insert) has deliberately **never been run** against it for
+  exactly this reason — don't run it.
+- **Google Maps:** production Map ID created and set
+  (`NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`, Vector, no tilt/rotation); the browser
+  key's HTTP-referrer restriction now includes `connecttvc.vercel.app`.
+- **Vercel project gotcha already hit once:** the project's Framework
+  Preset can silently diverge from what a specific "Production" deployment
+  was actually built with ("Production Overrides") if the preset was
+  wrong on an earlier deploy and only fixed afterward — Vercel doesn't
+  retroactively rebuild. Symptom: dashboard shows deployment "Ready" and
+  domain "Valid Configuration," yet the live URL 404s on every route. Fix:
+  redeploy (with build cache off) after confirming Project Settings →
+  Framework Preset is actually "Next.js."
 
 ## Tech stack
 
