@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { AdvancedMarker, ColorScheme, Map as GoogleMap, useMap } from "@vis.gl/react-google-maps";
 import { initialsOf, partyDisplayName, type Group, type Party, type Person } from "@/lib/types";
 import { groupPinColor, statusSolid } from "@/lib/colors";
@@ -140,9 +141,10 @@ export function FinderMap({
    * data at all), same guard the "Finding for" search already uses. */
   showPeopleAvailable: boolean;
 }) {
+  const router = useRouter();
   const { theme } = useTheme();
   const located = groups.filter(hasLocation);
-  const missing = groups.length - located.length;
+  const missingGroups = groups.filter((g) => !hasLocation(g));
   const partyPoint = partyLocation(party);
 
   const membersByParty = useMemo(() => {
@@ -259,10 +261,29 @@ export function FinderMap({
         </button>
       )}
 
-      {missing > 0 && (
-        <div className="absolute bottom-3 left-3 rounded-full bg-[var(--surface)]/90 px-3 py-1 text-[11px] font-bold text-[var(--muted)] backdrop-blur">
-          {missing} group{missing === 1 ? "" : "s"} missing a location — save
-          its address in the Directory to place it on the map.
+      {missingGroups.length > 0 && (
+        <div className="absolute bottom-3 left-3 max-w-[calc(100%-1.5rem)] rounded-2xl bg-[var(--surface)]/95 px-3 py-2 text-[11px] font-bold text-[var(--muted)] shadow-[0_2px_8px_rgba(22,50,79,.18)] backdrop-blur">
+          <div>
+            {missingGroups.length} group{missingGroups.length === 1 ? "" : "s"} missing a
+            location — likely an address that could not be geocoded:
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-1 gap-y-1">
+            {missingGroups.map((g, i) => (
+              <span key={g.id}>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/directory/groups/${g.id}`)}
+                  className="font-extrabold text-[var(--brand-blue)] hover:underline"
+                >
+                  {g.name}
+                </button>
+                {i < missingGroups.length - 1 ? "," : ""}
+              </span>
+            ))}
+          </div>
+          <div className="mt-1 font-semibold text-[var(--faint)]">
+            Click a name to open it, then re-enter (or fix) its address.
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-07-27 · commit `95fe8e7` (pending: this batch — the Parties-list member rows, soft delete, and placement history — not yet committed)
+Last updated: 2026-07-27 · commit `fa0be3c` (pending: 017 v2 sample data generator + the five-city expansion batch, 018 — neither committed yet)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -455,13 +455,29 @@ supabase/
   016_placement_history.sql      — new placement_history table: an append-only log of every group
                                  a party has been assigned to over time, written automatically
                                  whenever saveParty() changes a party's group. Requires 013 (the
-                                 parties table). NOT CONFIRMED RUN — see the same section below.
+                                 parties table). CONFIRMED RUN.
+  017_bulk_sample_data_v2.sql    — generated (not hand-written) by scripts/generate-sample-data.mjs;
+                                 wipes placement_history/contact_log/people/parties/groups and
+                                 inserts 125 groups + 500 parties (200 solo, 300 two-person couples
+                                 sharing a surname) + 800 people, plus a realistic subset of
+                                 contact_log/placement_history rows. Supersedes 014 (left in place
+                                 as a historical record, not run again). Requires 013 and 016.
+                                 See "Fresh sample data (v2): 125 groups, 500 parties, 800 people"
+                                 below for the match-rate summary and generation approach.
+  018_five_city_expansion.sql    — generated (not hand-written) by scripts/generate-city-expansion.mjs;
+                                 PURELY ADDITIVE (no deletes) — adds 25 groups + 50 parties (20
+                                 solo, 30 couples, 80 people) split evenly across 5 groups + 10
+                                 parties in each of Flower Mound, Corinth, Coppell, Carrollton,
+                                 and Grapevine. Continues the id sequence from 017 (g126-g150,
+                                 p201-p220, cp301-cp330); new group names checked against 017's
+                                 125 to guarantee no collisions. Requires 017 already run with its
+                                 ids intact. See "Five-city expansion" below.
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (optional)  →  015_soft_delete.sql  →  016_placement_history.sql
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (superseded, don't run)  →  015_soft_delete.sql  →  016_placement_history.sql  →  017_bulk_sample_data_v2.sql (optional)  →  018_five_city_expansion.sql (optional, additive)
 ```
 
 **Current live/production status: schema.sql, seed.sql, 002, 003, 004,
@@ -471,16 +487,18 @@ owner made when going live (see "Product direction" and the go-live section
 above): production only has the original ~5+5 seed.sql rows, not the
 320-group/600-person fake DFW dataset, and 005 stays unrun until real data
 or a deliberate decision to demo with sample data. `013_party_split.sql`
-is **not yet confirmed run** — this one is a bigger deal than prior
-migrations (it drops real columns from `people`), so double-check the
-Supabase table editor after running it, before relying on anything in the
-"Party/Person split" section below. **`015_soft_delete.sql` and
-`016_placement_history.sql` are also not yet confirmed run** — the app
-code for both (soft-delete on `deleteParty`/`deletePerson`, the
-`placement_history` write on group changes) already assumes the columns
-and table they add exist, so run these two before relying on delete or
-placement-history behavior in production; see "Soft delete + placement
-history" below.
+must have been run at some point (015/016 both alter/depend on the
+`parties` table and were confirmed run without error), though no session
+explicitly logged running it — worth confirming directly in the Supabase
+table editor next time this doc is updated, rather than assuming. `015_soft_delete.sql`
+and `016_placement_history.sql` are **confirmed run** (2026-07-27).
+`017_bulk_sample_data_v2.sql` has also been run (2026-07-27) — production
+currently has the full 125-group/500-party/800-person v2 dataset live.
+`018_five_city_expansion.sql` is a fresh, **purely additive** optional
+batch (no deletes) — run it any time more sample households in those 5
+specific cities are wanted; unlike 005/014/017 it never wipes existing
+data, so it's lower-risk, but it still shouldn't be run once real
+coordinator-entered data exists (it's still fictional sample data).
 
 **This directly affects `009_couple_host_naming.sql`: its 320 `UPDATE ...
 WHERE id = 'gN'` statements target ids that only exist once 005 has been
@@ -1556,11 +1574,164 @@ integration for placement history (e.g. "average time in a group") —
 both reasonable follow-ons, neither built without being asked for.
 
 Verified: `tsc`/`eslint` clean (0 problems), full production build
-succeeds, confirmed a fresh page load has zero console errors. Not
-click-tested live — same standing login-gated constraint as every round
-this session; the guard, soft-delete, and placement-history write paths
-specifically still need one real save/delete cycle in a signed-in session
-to confirm end-to-end once 015 and 016 have been run.
+succeeds, confirmed a fresh page load has zero console errors. **Since
+this doc was last updated, 015 and 016 have been confirmed run in
+production** — the guard, soft-delete, and placement-history write paths
+are live but still haven't had a real save/delete cycle click-tested in a
+signed-in session.
+
+## Fresh sample data (v2): 125 groups, 500 parties, 800 people
+
+Requested a full scrub-and-regenerate of sample data at different, larger
+numbers than the original DFW dataset — 125 Home Groups, 500 parties (300
+of them two-person couples sharing a surname, 200 solo), 800 people total
+— "a good example of what will actually be seen and how to use the
+system." Extended `scripts/generate-sample-data.mjs` (the same generator
+that produced `014_bulk_sample_data.sql`) rather than writing a one-off
+SQL file by hand, and re-ran it to produce `017_bulk_sample_data_v2.sql`.
+
+**Confirmed with the project owner up front:** "500 total unique parties
+and people, 300 of which are parties with 2 people" meant 500 parties
+total (300 couples + 200 solo → 800 Person rows), not 500 Person rows —
+worth remembering if a future request uses similar phrasing, since the
+two readings differ by 300 people.
+
+**Match-rate tuning had to be pushed further than the original dataset.**
+125 groups spread across 5 life stages is a meaningfully sparser pool
+than the original 320-group dataset (roughly half the groups-to-parties
+ratio), so the same tuning knobs that got that dataset to 16.8%
+zero-match weren't enough here — a first pass at equivalent settings
+landed at 45% zero-match. Iterated on three knobs together until landing
+at a comparable **22.0% zero, 12.6% one, 65.4% two-or-more (avg 3.07, max
+10)**:
+- **Geography concentrated harder**: 4 primary DFW cities (Dallas, Fort
+  Worth, Arlington, Plano) instead of the original 10, weighted 40:1
+  against the long tail (was ~8:1) — see `CITY_POOL` in the generator.
+- **Life stage skewed harder toward Families/Everyone** (8 of 13 weighted
+  slots, up from 6 of 11).
+- **Party day-availability widened to 4–6 days** (was 3–5 in the original
+  dataset's own v1→v2 tuning pass), still drawn from the same
+  weeknight-heavy weighting as group meeting days so the two stay
+  correlated rather than independently random.
+
+The exact match-rate distribution is computed by the generator itself and
+written into `017_bulk_sample_data_v2.sql`'s own header comment, same
+convention as the original `005_sample_data_dfw.sql`.
+
+**New: the generator also seeds contact_log and placement_history rows**,
+so those two features (both added earlier this session) have real demo
+data to show instead of being empty on a fresh dataset — the request was
+explicit about wanting "a good example of... how to use the system," and
+an empty outreach log or placement history doesn't demonstrate either
+feature exists:
+- **~35% of parties** get 1–3 contact_log entries (outreach notes,
+  attributed to one of 4 fictional coordinator emails, timestamped 1–180
+  days ago).
+- **Every currently-`Grouped` party** gets a "current" placement_history
+  entry (its actual assigned group, `unassigned_at` null).
+- **~15% of those** also get a closed-out prior entry for a *different*
+  group, chronologically before the current one — so Placement History
+  visibly shows a party that moved between groups, not just a single
+  static assignment.
+- **~10% of not-currently-grouped parties** get a closed-out prior entry
+  even though they have no current group — a party that was placed once,
+  left, and is back on the market.
+
+**Group names are guaranteed unique** (125 real Home Groups need distinct
+names) via picking surnames without replacement from a deduplicated,
+~155-entry surname pool (`groupSurnames = shuffled(LAST_NAMES).slice(0,
+NUM_GROUPS)`) — the original generator picked group surnames with plain
+`rand()`, which would have produced duplicate "The Smiths"-style group
+names well before reaching 125. Party/couple surnames still use plain
+`rand()` freely (duplicates across different households are normal and
+expected, unlike group names).
+
+`014_bulk_sample_data.sql` is left in place as a historical record but
+superseded — the migration order table above marks it "don't run."
+`017_bulk_sample_data_v2.sql` **has since been run against production**
+(2026-07-27, confirmed live in the app: header shows 125 Groups/500
+Parties) — it's a destructive full reset (same `delete from ...`
+convention as every prior bulk-sample migration), so any future re-run
+should only happen when a fresh test batch is actually wanted, never once
+real coordinator-entered data exists.
+
+Verified: generated file's row counts spot-checked directly (125/500/800
+across groups/parties/people, all row-count and semicolon-termination
+sanity checks pass), all 125 group names confirmed unique via a direct
+grep-for-duplicates pass on the output file, `tsc`/`eslint` clean.
+Confirmed live in production after the user ran it — Directory, Reports,
+and the Map all reflect the new counts correctly.
+
+## Five-city expansion: 25 more groups, 50 more parties (additive, no deletes)
+
+Follow-up request: add more Home Groups and Parties concentrated in five
+specific DFW cities — Flower Mound, Corinth, Coppell, Carrollton, and
+Grapevine — 5 groups and 10 parties (kept at the same 2:3 solo:couple
+ratio as 017, so 4 solo + 6 couples) per city. Unlike every previous
+bulk-sample migration, this one is explicitly **not** a wipe-and-replace —
+confirmed directly with the user mid-build that it only adds rows,
+never deletes anything already in production.
+
+New script `scripts/generate-city-expansion.mjs` (checked in, parameterized
+by city list + counts/city, so it's reusable for a future different set of
+cities) writes `supabase/018_five_city_expansion.sql`:
+- **Purely additive** — the output file contains only `insert` statements,
+  no `delete from ...` at all, the first bulk-sample migration in this
+  project to work that way.
+- **Continues the existing id sequence** rather than starting over: reads
+  017's own id range (groups g1-g125, solo parties p1-p200, couple
+  parties cp1-cp300) and starts the new batch at g126/p201/cp301, so
+  there's no risk of colliding with rows 017 already inserted.
+- **Group names checked against 017's 125 existing names** before picking
+  new ones — reads 017_bulk_sample_data_v2.sql back in, extracts every
+  group name already used, and only draws new group surnames from what's
+  left in the surname pool (topped up with ~24 extra surnames specifically
+  so the remaining pool would comfortably cover the 25 newly needed,
+  after 017 had already used 125 of the original ~155).
+- Two of the five cities — **Corinth and Coppell — didn't exist anywhere
+  in 017's dataset at all**; this migration is the first sample data to
+  place anything there. (Flower Mound, Carrollton, and Grapevine were
+  already present in 017's weighted city pool, so those three gain
+  additional groups/parties alongside what's already there.)
+- **Match-rate check is scoped honestly**: the header comment reports the
+  new 25 groups vs. new 50 parties match rate on their own (40.0% zero,
+  40.0% one, 20.0% two-or-more — thinner than 017's, since 5 groups per
+  city is a much sparser pool than 017's 125 across 5 life stages) —
+  explicitly *not* cross-checked against the existing 125/500 from 017,
+  which would need parsing that entire file's contents. Once actually
+  loaded into the app, real match results will be better than this
+  isolated number suggests, since e.g. a Flower Mound party can also
+  match against any pre-existing Flower Mound group from 017.
+
+Verified: row counts confirmed exactly (25 groups/50 parties/80 people),
+zero internal duplicate group names, zero collisions against 017's 125
+existing names, id ranges confirmed contiguous and non-overlapping
+(g126-g150/p201-p220/cp301-cp330), exactly 5 groups per city confirmed,
+file terminates cleanly. Not yet run against the database — that's the
+user's own action.
+
+## Hotfix: the "missing a location" map banner didn't say which group
+
+User report, found live in production (018 hadn't even been run yet — this
+was one of the original 125 groups from 017 whose address genuinely
+doesn't geocode): the Map's "1 group missing a location" banner
+(`FinderMap.tsx`) only ever showed a count, with no way to tell which
+group it was or do anything about it short of opening every group one by
+one.
+
+Fixed: the banner now names every group that's missing a location, and
+each name is a clickable link (`router.push` to `/directory/groups/:id`)
+straight to that group's edit page, so fixing a bad address is one click
+away instead of a manual hunt. Changed `missing` (a bare count) to
+`missingGroups` (the actual `Group[]`) so the name/id data was already
+sitting right there — no new query needed.
+
+Verified: `tsc`/`eslint` clean, full production build succeeds. Not
+click-tested live — same standing login-gated constraint as the rest of
+this project; the dev server also requires a real sign-in this session
+couldn't perform, and the Browser pane wasn't displaying frames when
+checked. The actual group with the bad address hasn't been identified or
+fixed yet — that's the next step once this ships, using the new link.
 
 ## What's built and verified working
 
