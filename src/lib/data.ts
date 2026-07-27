@@ -99,6 +99,7 @@ export async function getParties(): Promise<Party[]> {
   const { data, error } = await supabase
     .from("parties")
     .select("*")
+    .is("deleted_at", null)
     .order("party_name");
   if (error) throw new Error(`Couldn't load parties: ${error.message}`);
   return (data ?? []).map(rowToParty);
@@ -110,6 +111,7 @@ export async function getPeople(): Promise<Person[]> {
   const { data, error } = await supabase
     .from("people")
     .select("*")
+    .is("deleted_at", null)
     .order("name");
   if (error) throw new Error(`Couldn't load people: ${error.message}`);
   return (data ?? []).map(rowToPerson);

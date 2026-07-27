@@ -148,6 +148,21 @@ export interface ContactLogEntry {
   createdAt: string;
 }
 
+/** One group assignment in a party's history — auto-written by saveParty()
+ * whenever the assigned group actually changes, never hand-entered.
+ * `unassignedAt` is null while this is the party's current group.
+ * `groupName` is a snapshot taken at assignment time, so the history stays
+ * readable even if that group is later renamed or deleted. */
+export interface PlacementHistoryEntry {
+  id: string;
+  partyId: string;
+  groupId: string | null;
+  groupName: string;
+  assignedAt: string;
+  assignedBy: string | null;
+  unassignedAt: string | null;
+}
+
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";

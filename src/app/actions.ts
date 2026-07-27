@@ -5,7 +5,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getViewerEmail } from "@/lib/auth";
 import { geocodeAddress, type GeoResult } from "@/lib/geocode";
 import { getTravelTimes, type TravelTime } from "@/lib/routes";
-import type { ContactLogEntry, Group, Party, Person } from "@/lib/types";
+import type { ContactLogEntry, Group, Party, PlacementHistoryEntry, Person } from "@/lib/types";
 
 type SupabaseClient = NonNullable<Awaited<ReturnType<typeof getServerSupabase>>>;
 
@@ -135,6 +135,51 @@ function staleConflictError(
   return null;
 }
 
+async function loadExistingPartyGroup(supabase: SupabaseClient, id: string): Promise<string | null> {
+  const { data } = await supabase.from("parties").select("group_id").eq("id", id).maybeSingle();
+  return data?.group_id ?? null;
+}
+
+/** Appends to a party's placement history whenever its assigned group
+ * actually changes — closes out the previously-open assignment (if any)
+ * and opens a new one for the new group (if any). Auto-attributed to
+ * whoever saved the change, same as the contact log. Never fails the
+ * caller's save on its own error — logged instead, same convention as
+ * geocode.ts's failure logging — a history-write hiccup shouldn't block a
+ * real save. */
+async function recordGroupChange(
+  supabase: SupabaseClient,
+  partyId: string,
+  previousGroupId: string | null,
+  newGroupId: string | null,
+): Promise<void> {
+  if (previousGroupId === newGroupId) return;
+  try {
+    const assignedBy = await getViewerEmail();
+    const now = new Date().toISOString();
+
+    if (previousGroupId) {
+      await supabase
+        .from("placement_history")
+        .update({ unassigned_at: now })
+        .eq("party_id", partyId)
+        .is("unassigned_at", null);
+    }
+    if (newGroupId) {
+      const { data: g } = await supabase.from("groups").select("name").eq("id", newGroupId).maybeSingle();
+      await supabase.from("placement_history").insert({
+        party_id: partyId,
+        group_id: newGroupId,
+        group_name_snapshot: g?.name ?? "",
+        assigned_by: assignedBy,
+        assigned_at: now,
+      });
+    }
+  } catch (err) {
+    console.error("Failed to record placement history:", err);
+  }
+}
+
 export async function saveGroup(group: Group): Promise<ActionResult> {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true, persisted: false };
@@ -180,6 +225,8 @@ export async function saveParty(party: Party): Promise<ActionResult> {
   const conflict = staleConflictError(existing?.updated_at, party.updatedAt);
   if (conflict) return { ok: false, error: conflict, persisted: true };
 
+  const previousGroupId = await loadExistingPartyGroup(supabase, party.id);
+
   const addressChanged = !existing || existing.address !== party.address;
   const geo =
     party.address.trim() && (addressChanged || existing?.lat == null)
@@ -193,6 +240,9 @@ export async function saveParty(party: Party): Promise<ActionResult> {
     .select("updated_at")
     .single();
   if (error) return { ok: false, error: error.message, persisted: true };
+
+  await recordGroupChange(supabase, party.id, previousGroupId, party.group);
+
   return {
     ok: true,
     persisted: true,
@@ -316,21 +366,73 @@ export async function deleteGroup(id: string): Promise<ActionResult> {
   return { ok: true, persisted: true };
 }
 
-/** Deletes the party and, via `on delete cascade`, every linked Person row
- * and contact_log entry with it — a party's members and outreach history
- * don't make sense to keep around once the party itself is gone. */
+/** Soft-deletes the party and, since the DB can no longer hard-cascade a
+ * soft delete, every linked Person row too (mirroring what the old `on
+ * delete cascade` used to do). contact_log and placement_history rows are
+ * deliberately left alone — the party row itself still exists, just
+ * marked deleted, so its history stays intact and recoverable alongside
+ * it. See 015_soft_delete.sql for why this isn't a real DELETE anymore:
+ * a misclick on a real person's record used to be unrecoverable. */
 export async function deleteParty(id: string): Promise<ActionResult> {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true, persisted: false };
-  const { error } = await supabase.from("parties").delete().eq("id", id);
+  const deletedBy = await getViewerEmail();
+  const deletedAt = new Date().toISOString();
+
+  const { error } = await supabase
+    .from("parties")
+    .update({ deleted_at: deletedAt, deleted_by: deletedBy })
+    .eq("id", id);
   if (error) return { ok: false, error: error.message, persisted: true };
+
+  const { error: memberError } = await supabase
+    .from("people")
+    .update({ deleted_at: deletedAt, deleted_by: deletedBy })
+    .eq("party_id", id);
+  if (memberError) return { ok: false, error: memberError.message, persisted: true };
+
   return { ok: true, persisted: true };
 }
 
+/** Removing a person is only ever "leave this party" — never "unlink and
+ * keep them floating," since `people.party_id` is NOT NULL by design (see
+ * 013_party_split.sql). So the last remaining (non-deleted) member of a
+ * party can't be removed this way; the only valid way to get rid of a
+ * party's last person is deleteParty(), which takes the whole party with
+ * it. Checked server-side (not just hidden in the UI) since Server Actions
+ * are reachable via direct POST regardless of what the UI allows.
+ *
+ * Soft-deleted, not hard-deleted (see 015_soft_delete.sql) — recoverable
+ * by clearing deleted_at directly in the table editor if someone's removed
+ * by mistake. */
 export async function deletePerson(id: string): Promise<ActionResult> {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true, persisted: false };
-  const { error } = await supabase.from("people").delete().eq("id", id);
+
+  const { data: person } = await supabase
+    .from("people")
+    .select("party_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (person) {
+    const { count } = await supabase
+      .from("people")
+      .select("id", { count: "exact", head: true })
+      .eq("party_id", person.party_id)
+      .is("deleted_at", null);
+    if ((count ?? 0) <= 1) {
+      return {
+        ok: false,
+        persisted: true,
+        error: "A party needs at least one member — delete the whole party instead of removing its last member.",
+      };
+    }
+  }
+
+  const { error } = await supabase
+    .from("people")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: await getViewerEmail() })
+    .eq("id", id);
   if (error) return { ok: false, error: error.message, persisted: true };
   return { ok: true, persisted: true };
 }
@@ -382,6 +484,40 @@ export async function addContactLogEntry(
     .single();
   if (error) return { ok: false, error: error.message };
   return { ok: true, entry: rowToContactLogEntry(data) };
+}
+
+function rowToPlacementHistoryEntry(r: {
+  id: string;
+  party_id: string;
+  group_id: string | null;
+  group_name_snapshot: string;
+  assigned_at: string;
+  assigned_by: string | null;
+  unassigned_at: string | null;
+}): PlacementHistoryEntry {
+  return {
+    id: r.id,
+    partyId: r.party_id,
+    groupId: r.group_id,
+    groupName: r.group_name_snapshot,
+    assignedAt: r.assigned_at,
+    assignedBy: r.assigned_by,
+    unassignedAt: r.unassigned_at,
+  };
+}
+
+/** Most-recent-first group-assignment history for one party — written
+ * automatically by saveParty()/recordGroupChange(), never hand-entered. */
+export async function getPlacementHistory(partyId: string): Promise<PlacementHistoryEntry[]> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("placement_history")
+    .select("id, party_id, group_id, group_name_snapshot, assigned_at, assigned_by, unassigned_at")
+    .eq("party_id", partyId)
+    .order("assigned_at", { ascending: false });
+  if (error) throw new Error(`Couldn't load placement history: ${error.message}`);
+  return (data ?? []).map(rowToPlacementHistoryEntry);
 }
 
 export async function signOut() {

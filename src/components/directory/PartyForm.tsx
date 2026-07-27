@@ -27,6 +27,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { AddressAutocomplete } from "./AddressAutocomplete";
 import { SectionHeading, Field } from "./form-bits";
 import { ContactLog } from "./ContactLog";
+import { PlacementHistory } from "./PlacementHistory";
 
 export function PartyForm({
   party,
@@ -103,8 +104,14 @@ export function PartyForm({
             </div>
             <button
               type="button"
+              disabled={members.length === 1}
               onClick={() => setRemoveCandidate(m)}
-              className="mt-2 text-[11.5px] font-bold text-[oklch(0.55_0.18_20)] hover:underline"
+              title={members.length === 1 ? "A party needs at least one member — delete the whole party instead" : undefined}
+              className={
+                members.length === 1
+                  ? "mt-2 cursor-not-allowed text-[11.5px] font-bold text-[var(--faint)]"
+                  : "mt-2 text-[11.5px] font-bold text-[oklch(0.55_0.18_20)] hover:underline"
+              }
             >
               Remove
             </button>
@@ -239,6 +246,9 @@ export function PartyForm({
           />
         </Field>
       </div>
+
+      <SectionHeading>Placement history</SectionHeading>
+      <PlacementHistory partyId={party.id} />
 
       <SectionHeading>Outreach</SectionHeading>
       <ContactLog partyId={party.id} />

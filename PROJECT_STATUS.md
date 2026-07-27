@@ -1,6 +1,6 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-07-26 · commit `b104f47` (pending: this batch not yet committed)
+Last updated: 2026-07-27 · commit `95fe8e7` (pending: this batch — the Parties-list member rows, soft delete, and placement history — not yet committed)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -362,35 +362,49 @@ src/
       ReportsPage.tsx           — computes aggregates from groups/people, renders every report section
       charts.tsx                — hand-rolled, theme-aware chart primitives (no charting dependency)
     directory/                 — formerly "console"; renamed since "Directory" reads better to
-                               coordinators than an internal-tooling word like "Console"
-      DirectoryData.tsx        — React context holding groups/people + setters, so an edit on any
-                                 route (list or detail) is instantly visible everywhere else,
-                                 without keeping every page mounted at once
-      DirectoryNav.tsx          — the "Home Groups | People" tab pills, as real <Link>s
-      GroupsListPage.tsx / PeopleListPage.tsx — search/filter bar + table (used by the list routes)
-      GroupEditPage.tsx / PersonEditPage.tsx  — back link + form + <SaveBar> (used by the [id] routes)
+                               coordinators than an internal-tooling word like "Console". Since
+                               the Party/Person split, this is Groups + Parties (not "People") —
+                               see that section below for the people -> parties rename.
+      DirectoryData.tsx        — React context holding groups/parties/people + setters, so an edit
+                                 on any route (list or detail) is instantly visible everywhere
+                                 else, without keeping every page mounted at once
+      DirectoryNav.tsx          — the "Home Groups | Parties" tab pills, as real <Link>s
+      GroupsListPage.tsx / PartiesListPage.tsx — search/filter bar + table (used by the list
+                                 routes). PartiesListPage's table also lists each individual
+                                 member as its own clickable row under any party of 2+ — see the
+                                 "Parties list now surfaces individual members" section below.
+      GroupEditPage.tsx / PartyEditPage.tsx  — back link + form + <SaveBar> (used by the [id] routes)
       SaveBar.tsx               — shared sticky delete/save action bar
-      tables.tsx                — GroupTable/PersonTable/EmptyState (D365-style list view)
+      tables.tsx                — GroupTable/PartyTable/EmptyState (D365-style list view)
       AddressAutocomplete.tsx — Places autocomplete input; on selection, resolves city via
                                  Place Details and fires onPlaceSelected for area auto-population
-      GroupForm.tsx / PersonForm.tsx — the actual edit forms (unchanged; each already renders its
-                                 own header, so the edit pages stay thin)
+      GroupForm.tsx / PartyForm.tsx — the actual edit forms (each already renders its own header,
+                                 so the edit pages stay thin). PartyForm.tsx's Members section
+                                 edits linked Person rows inline (name/email/phone only — see
+                                 Party/Person split below for why); Remove is disabled on a
+                                 party's last remaining member (see the soft-delete section below).
+      ContactLog.tsx            — append-only outreach history for a party, auto-attributed to
+                                 the signed-in coordinator (see "New outreach/contact log" below)
+      PlacementHistory.tsx      — read-only, auto-generated log of every group a party has been
+                                 assigned to over time (see "Soft delete + placement history" below)
       form-bits.tsx            — shared Field/SectionHeading/BackLink layout helpers
     finder/
       Finder.tsx               — Map tab: filters, "Finding for" search, group list, travel-time fetch
       FinderMap.tsx            — the actual Google Map: DFW bounds, anti-overlap, group/person pins
       GroupCard.tsx            — individual group card in the list (collapsed/expanded)
-      PersonSearch.tsx         — typeahead person picker (replaced a plain <select>)
+      PartySearch.tsx         — typeahead party picker (matches by party name or any member's name)
     icons.tsx / ui.tsx       — shared SVG icons and styled primitives (TextInput, StatusPill, etc.)
   lib/
-    auth.ts                — getViewerIsLeader() helper
+    auth.ts                — getViewerEmail()/getViewerIsLeader() helpers
     colors.ts               — oklch-based color system (life-stage hues, status hues)
-    data.ts                  — getGroups/getPeople (Supabase-or-seed reads)
+    data.ts                  — getGroups/getParties/getPeople (Supabase-or-seed reads); parties
+                                 and people reads filter out soft-deleted rows (deleted_at is null)
     geocode.ts                — server-only: address -> {lat, lng, city} via Geocoding API
     routes.ts                  — server-only: batched drive-time via Routes API computeRouteMatrix
-    seed.ts                     — demo-mode fallback data (5 groups + 5 people, fictional)
+    seed.ts                     — demo-mode fallback data (5 groups, 5 parties, 6 people, fictional)
     supabase/{client,server,config}.ts — Supabase client setup, demo-mode detection
-    types.ts                     — all domain types (Group, Person, statuses, etc.)
+    types.ts                     — all domain types (Group, Party, Person, ContactLogEntry,
+                                 PlacementHistoryEntry, statuses, etc.)
   proxy.ts                       — Next 16 middleware-equivalent; gates every route except /login
 supabase/
   schema.sql                     — full schema + RLS policies (run first, once)
@@ -434,12 +448,20 @@ supabase/
                                  013 already applied (needs the parties table). NOT CONFIRMED RUN
                                  — re-run the generator any time for a fresh random batch instead
                                  of reusing this exact file.
+  015_soft_delete.sql            — adds deleted_at/deleted_by to parties + people; deleteParty/
+                                 deletePerson now soft-delete (UPDATE, not DELETE) instead of
+                                 permanently destroying real people's data on a misclick. NOT
+                                 CONFIRMED RUN — see "Soft delete + placement history" below.
+  016_placement_history.sql      — new placement_history table: an append-only log of every group
+                                 a party has been assigned to over time, written automatically
+                                 whenever saveParty() changes a party's group. Requires 013 (the
+                                 parties table). NOT CONFIRMED RUN — see the same section below.
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (optional)
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (optional)  →  015_soft_delete.sql  →  016_placement_history.sql
 ```
 
 **Current live/production status: schema.sql, seed.sql, 002, 003, 004,
@@ -452,7 +474,13 @@ or a deliberate decision to demo with sample data. `013_party_split.sql`
 is **not yet confirmed run** — this one is a bigger deal than prior
 migrations (it drops real columns from `people`), so double-check the
 Supabase table editor after running it, before relying on anything in the
-"Party/Person split" section below.
+"Party/Person split" section below. **`015_soft_delete.sql` and
+`016_placement_history.sql` are also not yet confirmed run** — the app
+code for both (soft-delete on `deleteParty`/`deletePerson`, the
+`placement_history` write on group changes) already assumes the columns
+and table they add exist, so run these two before relying on delete or
+placement-history behavior in production; see "Soft delete + placement
+history" below.
 
 **This directly affects `009_couple_host_naming.sql`: its 320 `UPDATE ...
 WHERE id = 'gN'` statements target ids that only exist once 005 has been
@@ -1429,6 +1457,110 @@ Verified: `tsc`/`eslint` clean (0 problems), full production build
 succeeds (routes confirm `/directory/parties` and `/directory/parties/[id]`
 exist, old `/directory/people/**` is gone). Not click-tested live — same
 standing login-gated constraint as every round this session.
+
+## Parties list now surfaces individual members, not just households
+
+Follow-up request after the Party/Person split shipped: browsing the
+Directory only ever showed one row per Party — a party of 2+ collapsed to
+a single row with member names as a small subline, with no way to click
+directly on an individual or see their contact info without opening the
+party's edit page first. Confirmed with the project owner (multi-question
+pass): keep one unified list (not a separate People tab), show each
+member of a 2+ party as its own clickable row (name + email/phone only,
+no duplicated status/city columns since those live on the Party), and a
+solo party still renders as just the one row — no redundant party-row +
+member-row pair for a household of one.
+
+- **`PartyTable`** (`tables.tsx`) now renders, for every party with 2+
+  members, its existing aggregate row followed by one lightweight row per
+  member — small avatar, name, and `email · phone` (or "No contact info on
+  file"), indented and on a muted background so they read as nested under
+  their party. Clicking a member row navigates to the same party edit page
+  as clicking the party row itself (`/directory/parties/:id`), consistent
+  with the confirmed design: editing always happens at the party level,
+  since name/email/phone are the only fields that are actually
+  per-member — everything else (address, availability, status, etc.) is
+  shared and edited once for the whole household.
+- **`PartiesListPage.tsx`**'s footer count now reads "X of Y parties · Z
+  people" (summed member count across the currently filtered parties)
+  instead of just a party count.
+
+Confirmed the backend needed no changes for this — `parties`/`people`
+already modeled exactly this shape (Party owns shared/matching fields,
+Person is lean identity-only) per `013_party_split.sql`.
+
+Verified: `tsc`/`eslint` clean, full production build succeeds. Not
+click-tested live — same standing login-gated constraint.
+
+## Soft delete + placement history
+
+A follow-up architecture review (three questions: is the Party/Person
+split still the right structure, what's missing vs. best practice, add
+the gaps) surfaced two real, non-cosmetic gaps and one guard, all three
+implemented:
+
+1. **The last-member removal guard.** `PartyForm.tsx`'s member "Remove"
+   was previously always clickable, even on a party's only member —
+   confirming it would `deletePerson()` immediately (no Save-gate), while
+   the "a party needs at least one member" check only ever ran on Save,
+   leaving an orphaned, empty Party row in the database with no client-
+   side way to prevent it. Now guarded **twice**: the Remove button is
+   disabled (with an explanatory tooltip) on a party's last member in
+   `PartyForm.tsx`, and `deletePerson()` (`actions.ts`) independently
+   re-checks server-side (counting only non-deleted members) and rejects
+   the delete if it would leave the party with zero — server-side because
+   Server Actions are reachable via direct POST regardless of what the UI
+   allows, same reasoning as every other auth check in this file.
+2. **Soft delete for parties and people** (`015_soft_delete.sql`, **NOT
+   CONFIRMED RUN**). `deleteParty`/`deletePerson` used to be permanent
+   `DELETE`s — a misclick meant a real person's contact info and match
+   history was gone with no recovery path. Both now add `deleted_at`/
+   `deleted_by` columns and turn the delete into an `UPDATE` instead;
+   `data.ts`'s `getParties`/`getPeople` filter `deleted_at is null` so
+   soft-deleted rows disappear from every list exactly as before. Since
+   the DB can no longer hard-cascade a soft delete, `deleteParty` now
+   explicitly also soft-deletes every linked Person row itself, mirroring
+   what `on delete cascade` used to do automatically. `contact_log` and
+   `placement_history` rows are deliberately left untouched by a party
+   delete — the party row itself still exists (just marked deleted), so
+   its history stays intact right alongside it. Scoped to parties/people
+   only, not groups — those are the tables holding real people's PII and
+   placement history; groups stay a plain hard delete. **Recovery today
+   is manual** (clear `deleted_at` directly in the Supabase table
+   editor) — there's no in-app trash/restore view yet; a natural follow-on
+   if it's ever actually needed, not built preemptively.
+3. **Placement history** (`016_placement_history.sql`, **NOT CONFIRMED
+   RUN**, depends on 013's `parties` table). `parties.group_id` only ever
+   held the *current* assignment — no record that a party was ever in a
+   *different* group before. New `placement_history` table: one row per
+   assignment, `assigned_at`/`unassigned_at` (null while current),
+   auto-attributed `assigned_by`, and a `group_name_snapshot` taken at
+   assignment time (deliberately duplicated rather than only joined live
+   through `group_id`) so the history stays readable even if that group
+   is later renamed or deleted. Written automatically by a new
+   `recordGroupChange()` helper (`actions.ts`), called from `saveParty()`
+   whenever the saved `party.group` actually differs from what was
+   already in the database — closes out the previously-open assignment
+   (if any) and opens a new one (if the new group isn't null). Never
+   hand-entered, same "auto-attributed, trustworthy" philosophy as the
+   contact log. A history-write failure is caught and logged
+   (`console.error`) rather than failing the party save itself — an
+   audit-trail hiccup shouldn't block a real save. New read-only
+   `PlacementHistory.tsx` component (mirrors `ContactLog.tsx`'s
+   structure) renders the log under a new "Placement history" section in
+   `PartyForm.tsx`, between Assignment and Outreach.
+
+Explicitly scoped out, per the review that preceded this: no in-app
+restore/trash UI for soft-deleted records, and no Reports-page
+integration for placement history (e.g. "average time in a group") —
+both reasonable follow-ons, neither built without being asked for.
+
+Verified: `tsc`/`eslint` clean (0 problems), full production build
+succeeds, confirmed a fresh page load has zero console errors. Not
+click-tested live — same standing login-gated constraint as every round
+this session; the guard, soft-delete, and placement-history write paths
+specifically still need one real save/delete cycle in a signed-in session
+to confirm end-to-end once 015 and 016 have been run.
 
 ## What's built and verified working
 
