@@ -4,17 +4,17 @@ import { useMemo } from "react";
 import {
   GROUP_STATUSES,
   LIFE_STAGES,
-  PERSON_STATUSES,
+  PARTY_STATUSES,
   type Group,
-  type Person,
+  type Party,
 } from "@/lib/types";
 import { statusSolid } from "@/lib/colors";
 import { HBar, PairedBarChart, ReportCard, SegmentedBar, StatCard } from "./charts";
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
 
-export function ReportsPage({ groups, people }: { groups: Group[]; people: Person[] }) {
-  const stats = useMemo(() => computeStats(groups, people), [groups, people]);
+export function ReportsPage({ groups, parties }: { groups: Group[]; parties: Party[] }) {
+  const stats = useMemo(() => computeStats(groups, parties), [groups, parties]);
   const exportedAt = useMemo(
     () =>
       new Date().toLocaleString(undefined, {
@@ -54,7 +54,7 @@ export function ReportsPage({ groups, people }: { groups: Group[]; people: Perso
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="Total home groups" value={String(stats.totalGroups)} />
-          <StatCard label="Total people" value={String(stats.totalPeople)} />
+          <StatCard label="Total parties" value={String(stats.totalParties)} />
           <StatCard
             label="Groups open"
             value={`${stats.pctOpen}%`}
@@ -62,9 +62,9 @@ export function ReportsPage({ groups, people }: { groups: Group[]; people: Perso
             accent="oklch(0.5 0.14 150)"
           />
           <StatCard
-            label="People placed"
+            label="Parties placed"
             value={`${stats.pctPlaced}%`}
-            sublabel={`${stats.peopleByStatus.Grouped} of ${stats.totalPeople}`}
+            sublabel={`${stats.partiesByStatus.Grouped} of ${stats.totalParties}`}
             accent="oklch(0.5 0.14 150)"
           />
         </div>
@@ -110,14 +110,14 @@ export function ReportsPage({ groups, people }: { groups: Group[]; people: Perso
         </div>
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <ReportCard title="People placement funnel">
+          <ReportCard title="Party placement funnel">
             <div className="flex flex-col gap-3">
-              {PERSON_STATUSES.map((s) => (
+              {PARTY_STATUSES.map((s) => (
                 <HBar
                   key={s}
                   label={s}
-                  value={stats.peopleByStatus[s]}
-                  total={stats.totalPeople}
+                  value={stats.partiesByStatus[s]}
+                  total={stats.totalParties}
                   color={statusSolid(s)}
                 />
               ))}
@@ -139,13 +139,13 @@ export function ReportsPage({ groups, people }: { groups: Group[]; people: Perso
               </div>
               <div className="rounded-xl bg-[var(--panel-2)] p-3.5">
                 <div className="text-[11px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
-                  People needing
+                  Parties needing
                 </div>
                 <div className="mt-1 font-[family-name:var(--font-fredoka)] text-[22px] font-semibold text-[var(--ink)]">
-                  {stats.pctPeopleChildcare}%
+                  {stats.pctPartiesChildcare}%
                 </div>
                 <div className="mt-0.5 text-[12px] font-semibold text-[var(--muted)]">
-                  {stats.peopleNeedingChildcare} of {stats.totalPeople} people
+                  {stats.partiesNeedingChildcare} of {stats.totalParties} parties
                 </div>
               </div>
             </div>
@@ -156,17 +156,17 @@ export function ReportsPage({ groups, people }: { groups: Group[]; people: Perso
           <PairedBarChart
             rows={stats.byLifeStage}
             legendA="Groups"
-            legendB="People"
+            legendB="Parties"
             colorA="var(--brand-blue)"
             colorB="oklch(0.7 0.14 300)"
           />
         </ReportCard>
 
-        <ReportCard title="Top cities by groups & people">
+        <ReportCard title="Top cities by groups & parties">
           <PairedBarChart
             rows={stats.byCity}
             legendA="Groups"
-            legendB="People"
+            legendB="Parties"
             colorA="var(--brand-blue)"
             colorB="oklch(0.7 0.14 300)"
           />
@@ -185,16 +185,16 @@ export function ReportsPage({ groups, people }: { groups: Group[]; people: Perso
               value={stats.groupsByStatus.New}
             />
             <AttentionRow
-              tone={stats.peopleByStatus.Waitlisted > 0 ? "warn" : "ok"}
-              label="People waitlisted"
-              value={stats.peopleByStatus.Waitlisted}
+              tone={stats.partiesByStatus.Waitlisted > 0 ? "warn" : "ok"}
+              label="Parties waitlisted"
+              value={stats.partiesByStatus.Waitlisted}
             />
           </div>
 
           {stats.underservedCities.length > 0 && (
             <div className="mt-4 border-t border-[var(--divider-2)] pt-3.5">
               <div className="mb-2 text-[12px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
-                Cities with people but no open group
+                Cities with parties but no open group
               </div>
               <div className="flex flex-col gap-1.5">
                 {stats.underservedCities.map((c) => (
@@ -204,7 +204,7 @@ export function ReportsPage({ groups, people }: { groups: Group[]; people: Perso
                   >
                     <span className="font-bold text-[var(--ink)]">{c.city}</span>
                     <span>
-                      {c.people} {c.people === 1 ? "person" : "people"} waiting
+                      {c.parties} {c.parties === 1 ? "party" : "parties"} waiting
                     </span>
                   </div>
                 ))}
@@ -243,63 +243,63 @@ function AttentionRow({
   );
 }
 
-function computeStats(groups: Group[], people: Person[]) {
+function computeStats(groups: Group[], parties: Party[]) {
   const totalGroups = groups.length;
-  const totalPeople = people.length;
+  const totalParties = parties.length;
 
   const groupsByStatus = Object.fromEntries(
     GROUP_STATUSES.map((s) => [s, groups.filter((g) => g.status === s).length]),
   ) as Record<(typeof GROUP_STATUSES)[number], number>;
 
-  const peopleByStatus = Object.fromEntries(
-    PERSON_STATUSES.map((s) => [s, people.filter((p) => p.status === s).length]),
-  ) as Record<(typeof PERSON_STATUSES)[number], number>;
+  const partiesByStatus = Object.fromEntries(
+    PARTY_STATUSES.map((s) => [s, parties.filter((p) => p.status === s).length]),
+  ) as Record<(typeof PARTY_STATUSES)[number], number>;
 
   const activeGroups = groups.filter((g) => g.status !== "Closed");
   const totalCapacity = activeGroups.reduce((s, g) => s + g.capacity, 0);
   const totalMembers = activeGroups.reduce((s, g) => s + g.members, 0);
 
   const groupsWithChildcare = groups.filter((g) => g.childcare).length;
-  const peopleNeedingChildcare = people.filter((p) => p.childcareNeeded).length;
+  const partiesNeedingChildcare = parties.filter((p) => p.childcareNeeded).length;
 
   const byLifeStage = LIFE_STAGES.map((life) => ({
     label: life,
     a: groups.filter((g) => g.life === life).length,
-    b: people.filter((p) => p.life === life).length,
+    b: parties.filter((p) => p.life === life).length,
   }));
 
-  const cities = [...new Set([...groups.map((g) => g.area), ...people.map((p) => p.area)])].filter(
+  const cities = [...new Set([...groups.map((g) => g.area), ...parties.map((p) => p.area)])].filter(
     Boolean,
   );
   const byCityAll = cities.map((city) => ({
     label: city,
     a: groups.filter((g) => g.area === city).length,
-    b: people.filter((p) => p.area === city).length,
+    b: parties.filter((p) => p.area === city).length,
   }));
   const byCity = [...byCityAll].sort((x, y) => y.a + y.b - (x.a + x.b)).slice(0, 8);
 
   const openCities = new Set(groups.filter((g) => g.status === "Open").map((g) => g.area));
   const underservedCities = byCityAll
     .filter((c) => c.b > 0 && !openCities.has(c.label))
-    .map((c) => ({ city: c.label, people: c.b }))
-    .sort((x, y) => y.people - x.people)
+    .map((c) => ({ city: c.label, parties: c.b }))
+    .sort((x, y) => y.parties - x.parties)
     .slice(0, 5);
 
   return {
     totalGroups,
-    totalPeople,
+    totalParties,
     groupsByStatus,
-    peopleByStatus,
+    partiesByStatus,
     pctOpen: pct(groupsByStatus.Open, totalGroups),
-    pctPlaced: pct(peopleByStatus.Grouped, totalPeople),
+    pctPlaced: pct(partiesByStatus.Grouped, totalParties),
     totalCapacity,
     totalMembers,
     utilizationPct: pct(totalMembers, totalCapacity),
     spotsAvailable: Math.max(0, totalCapacity - totalMembers),
     groupsWithChildcare,
-    peopleNeedingChildcare,
+    partiesNeedingChildcare,
     pctGroupsChildcare: pct(groupsWithChildcare, totalGroups),
-    pctPeopleChildcare: pct(peopleNeedingChildcare, totalPeople),
+    pctPartiesChildcare: pct(partiesNeedingChildcare, totalParties),
     byLifeStage,
     byCity,
     underservedCities,

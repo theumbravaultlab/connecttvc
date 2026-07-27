@@ -15,12 +15,12 @@ function formatWhen(iso: string): string {
   });
 }
 
-/** Append-only outreach history for one person, so any coordinator can see
- * at a glance whether — and when — someone was already reached out to,
- * instead of risking a double message. Entries are auto-attributed to the
- * signed-in coordinator server-side; there's no "who contacted them" field
- * to hand-fill. */
-export function ContactLog({ personId }: { personId: string }) {
+/** Append-only outreach history for one party, so any coordinator can see
+ * at a glance whether — and when — this household was already reached out
+ * to, instead of risking a double message. Entries are auto-attributed to
+ * the signed-in coordinator server-side; there's no "who contacted them"
+ * field to hand-fill. */
+export function ContactLog({ partyId }: { partyId: string }) {
   const [entries, setEntries] = useState<ContactLogEntry[] | null>(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -28,7 +28,7 @@ export function ContactLog({ personId }: { personId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    getContactLog(personId)
+    getContactLog(partyId)
       .then((rows) => {
         if (!cancelled) setEntries(rows);
       })
@@ -41,12 +41,12 @@ export function ContactLog({ personId }: { personId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [personId]);
+  }, [partyId]);
 
   const handleLog = async () => {
     setSaving(true);
     setError(null);
-    const result = await addContactLogEntry(personId, note.trim());
+    const result = await addContactLogEntry(partyId, note.trim());
     setSaving(false);
     if (!result.ok) {
       setError(result.error ?? "Couldn't save that.");

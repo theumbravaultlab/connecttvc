@@ -5,9 +5,10 @@ import {
   DAYS,
   GROUP_STATUSES,
   LIFE_STAGES,
-  displayName,
   initialsOf,
+  partyDisplayName,
   type Group,
+  type Party,
   type Person,
 } from "@/lib/types";
 import {
@@ -26,15 +27,17 @@ import { SectionHeading, Field } from "./form-bits";
 
 export function GroupForm({
   group,
+  parties,
   people,
   onPatch,
 }: {
   group: Group;
+  parties: Party[];
   people: Person[];
   onPatch: (patch: Partial<Group>) => void;
 }) {
   const router = useRouter();
-  const roster = people.filter((p) => p.group === group.id);
+  const roster = parties.filter((p) => p.group === group.id);
   const s = spotsBadge(group.members, group.capacity, group.status);
   const spotsLabel = s.open <= 0 ? "Group is full" : `${s.open} of ${group.capacity} spots open`;
 
@@ -247,27 +250,30 @@ export function GroupForm({
         </Field>
       </div>
 
-      <SectionHeading>Assigned people ({roster.length})</SectionHeading>
+      <SectionHeading>Assigned parties ({roster.length})</SectionHeading>
       {roster.length === 0 ? (
         <p className="text-[12.5px] font-semibold text-[var(--faint)]">
           No one is currently assigned to this group.
         </p>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {roster.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => router.push(`/directory/people/${p.id}`)}
-              className="flex items-center gap-2.5 rounded-xl bg-[var(--panel-1)] px-3 py-2 text-left transition-colors hover:bg-[var(--panel-2)]"
-            >
-              <Avatar initials={initialsOf(displayName(p))} size={26} tone="muted" />
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-[var(--ink)]">
-                {displayName(p)}
-              </span>
-              <StatusPill status={p.status} />
-            </button>
-          ))}
+          {roster.map((pt) => {
+            const members = people.filter((p) => p.partyId === pt.id);
+            return (
+              <button
+                key={pt.id}
+                type="button"
+                onClick={() => router.push(`/directory/parties/${pt.id}`)}
+                className="flex items-center gap-2.5 rounded-xl bg-[var(--panel-1)] px-3 py-2 text-left transition-colors hover:bg-[var(--panel-2)]"
+              >
+                <Avatar initials={initialsOf(partyDisplayName(pt, members))} size={26} tone="muted" />
+                <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-[var(--ink)]">
+                  {partyDisplayName(pt, members)}
+                </span>
+                <StatusPill status={pt.status} />
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

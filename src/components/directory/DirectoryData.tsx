@@ -8,11 +8,13 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import type { Group, Person } from "@/lib/types";
+import type { Group, Party, Person } from "@/lib/types";
 
 type DirectoryData = {
   groups: Group[];
   setGroups: Dispatch<SetStateAction<Group[]>>;
+  parties: Party[];
+  setParties: Dispatch<SetStateAction<Party[]>>;
   people: Person[];
   setPeople: Dispatch<SetStateAction<Person[]>>;
   persisted: boolean;
@@ -20,25 +22,28 @@ type DirectoryData = {
 
 const Ctx = createContext<DirectoryData | null>(null);
 
-/** Holds the groups/people lifted at the app shell so an edit on any
- * Directory page is instantly visible on the Map (and vice versa) without
- * needing to keep every route mounted at once. */
+/** Holds the groups/parties/people lifted at the app shell so an edit on
+ * any Directory page is instantly visible on the Map (and vice versa)
+ * without needing to keep every route mounted at once. */
 export function DirectoryDataProvider({
   groups: initialGroups,
+  parties: initialParties,
   people: initialPeople,
   persisted,
   children,
 }: {
   groups: Group[];
+  parties: Party[];
   people: Person[];
   persisted: boolean;
   children: ReactNode;
 }) {
   const [groups, setGroups] = useState(initialGroups);
+  const [parties, setParties] = useState(initialParties);
   const [people, setPeople] = useState(initialPeople);
 
   return (
-    <Ctx.Provider value={{ groups, setGroups, people, setPeople, persisted }}>
+    <Ctx.Provider value={{ groups, setGroups, parties, setParties, people, setPeople, persisted }}>
       {children}
     </Ctx.Provider>
   );

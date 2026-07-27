@@ -1,4 +1,4 @@
-import type { Group, Person } from "./types";
+import type { Group, Party, Person } from "./types";
 
 // Seed data lifted verbatim from the design handoff (console records = canonical).
 
@@ -55,50 +55,54 @@ export const SEED_GROUPS: Group[] = [
   },
 ];
 
-export const SEED_PEOPLE: Person[] = [
+export const SEED_PARTIES: Party[] = [
   {
-    id: "js", name: "John Smith", email: "john.smith@email.com", phone: "(555) 201-4478",
+    id: "js", partyName: "The Smiths",
     area: "Midtown", address: "210 Campus Ave, Midtown", age: 29,
     days: ["Mon", "Tue", "Fri"], timePref: "Evenings", life: "Couples",
     interests: "Marriage, serving together", childcareNeeded: false, accessibility: "—",
     status: "New", group: null, joined: "Jun 2026",
     notes: "Recently married, new to Connect TVC and eager to plug in.",
-    partySize: 2, partnerName: "Sarah Smith", partyName: "The Smiths",
   },
   {
-    id: "sl", name: "Sarah Lopez", email: "sarah.lopez@email.com", phone: "(555) 664-1120",
+    id: "sl", partyName: "",
     area: "Eastside", address: "88 Willow St, Eastside", age: 34,
     days: ["Tue", "Thu"], timePref: "Evenings", life: "Families",
     interests: "Parenting, cooking", childcareNeeded: true, accessibility: "—",
     status: "Grouped", group: "1", joined: "Feb 2026",
     notes: "Family of four, needs childcare on meeting nights.",
-    partySize: 1, partnerName: "", partyName: "",
   },
   {
-    id: "mb", name: "Marcus Bell", email: "marcus.b@email.com", phone: "(555) 903-7781",
+    id: "mb", partyName: "",
     area: "North Hills", address: "45 Ridge Rd, North Hills", age: 41,
     days: ["Thu", "Sun"], timePref: "Flexible", life: "Everyone",
     interests: "Hiking, apologetics", childcareNeeded: false,
     accessibility: "Prefers ground-floor access", status: "Waitlisted", group: null,
     joined: "May 2026", notes: "New in town, flexible on timing.",
-    partySize: 1, partnerName: "", partyName: "",
   },
   {
-    id: "aw", name: "Aisha Warren", email: "aisha.w@email.com", phone: "(555) 448-2093",
+    id: "aw", partyName: "",
     area: "Downtown", address: "12 Market Sq, Downtown", age: 26,
     days: ["Wed", "Sat"], timePref: "Mornings", life: "Young Adults",
     interests: "Worship, mentoring", childcareNeeded: false, accessibility: "—",
     status: "Actively Searching", group: null, joined: "Jul 2026",
     notes: "Prefers an early-morning group downtown.",
-    partySize: 1, partnerName: "", partyName: "",
   },
   {
-    id: "dt", name: "David Tran", email: "david.tran@email.com", phone: "(555) 771-5560",
+    id: "dt", partyName: "",
     area: "Midtown", address: "300 University Dr, Midtown", age: 20,
     days: ["Mon", "Thu"], timePref: "Afternoons", life: "Students",
     interests: "Study groups, gaming", childcareNeeded: false, accessibility: "—",
     status: "Grouped", group: "5", joined: "Aug 2026",
     notes: "Sophomore, connected through campus ministry.",
-    partySize: 1, partnerName: "", partyName: "",
   },
+];
+
+export const SEED_PEOPLE: Person[] = [
+  { id: "js-1", partyId: "js", name: "John Smith", email: "john.smith@email.com", phone: "(555) 201-4478" },
+  { id: "js-2", partyId: "js", name: "Sarah Smith", email: "", phone: "" },
+  { id: "sl-1", partyId: "sl", name: "Sarah Lopez", email: "sarah.lopez@email.com", phone: "(555) 664-1120" },
+  { id: "mb-1", partyId: "mb", name: "Marcus Bell", email: "marcus.b@email.com", phone: "(555) 903-7781" },
+  { id: "aw-1", partyId: "aw", name: "Aisha Warren", email: "aisha.w@email.com", phone: "(555) 448-2093" },
+  { id: "dt-1", partyId: "dt", name: "David Tran", email: "david.tran@email.com", phone: "(555) 771-5560" },
 ];

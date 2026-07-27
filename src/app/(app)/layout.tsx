@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/AppShell";
-import { getGroups, getPeople } from "@/lib/data";
+import { getGroups, getParties, getPeople } from "@/lib/data";
 import { getViewerEmail } from "@/lib/auth";
 import { supabaseConfigured } from "@/lib/supabase/config";
 
@@ -12,8 +12,9 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [groups, people, email] = await Promise.all([
+  const [groups, parties, people, email] = await Promise.all([
     getGroups(),
+    getParties(),
     getPeople(),
     getViewerEmail(),
   ]);
@@ -22,6 +23,7 @@ export default async function AppLayout({
     <main className="h-dvh w-full overflow-hidden bg-[var(--surface)] print:h-auto print:overflow-visible">
       <AppShell
         groups={groups}
+        parties={parties}
         people={people}
         userEmail={email}
         persisted={supabaseConfigured}

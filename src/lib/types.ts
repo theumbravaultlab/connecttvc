@@ -11,12 +11,12 @@ export type LifeStage =
 
 export type GroupStatus = "New" | "Open" | "Closed";
 export const GROUP_STATUSES: GroupStatus[] = ["New", "Open", "Closed"];
-export type PersonStatus =
+export type PartyStatus =
   | "New"
   | "Actively Searching"
   | "Waitlisted"
   | "Grouped";
-export const PERSON_STATUSES: PersonStatus[] = [
+export const PARTY_STATUSES: PartyStatus[] = [
   "New",
   "Actively Searching",
   "Waitlisted",
@@ -75,12 +75,19 @@ export interface Group {
   updatedAt?: string;
 }
 
-/** A person seeking placement — managed by coordinators. */
-export interface Person {
+/** A household/individual seeking placement — the unit "Finding for"
+ * actually matches against. Couples/households searching together (e.g.
+ * "the Griers") are one Party with two linked Person records, not two
+ * separately-matched people — matching (life stage, days, city, childcare,
+ * age, etc.) is evaluated once per party against one shared set of
+ * criteria, never reconciled between individuals' possibly-different
+ * answers. A solo searcher is just a party of one. */
+export interface Party {
   id: string;
-  name: string;
-  email: string;
-  phone: string;
+  // The connected/searchable name for a party of 2+ (e.g. "The Griers") —
+  // optional; falls back to the member names when blank. See
+  // partyDisplayName().
+  partyName: string;
   area: string;
   address: string; // home address, private — used for routing/map only
   days: DayShort[];
@@ -93,27 +100,26 @@ export interface Person {
   interests: string;
   childcareNeeded: boolean;
   accessibility: string;
-  status: PersonStatus;
+  status: PartyStatus;
   group: string | null; // assigned group id
   joined: string;
   notes: string;
-  // Couples/households searching together (e.g. "the Smiths") stay one
-  // Person record rather than two — partySize is how many spots they
-  // need, partnerName is a plain-text name for whoever they're searching
-  // with. Deliberately not a second linked record: simpler, and matching
-  // (life stage, days, city, childcare, etc.) only ever needs to be
-  // evaluated once per party against one shared set of criteria, not
-  // reconciled between two individuals' possibly-different answers.
-  partySize: number;
-  partnerName: string;
-  // The connected/searchable name for a party of 2+ (e.g. "The Smiths") —
-  // deliberately separate from `name` (the primary individual) and
-  // `partnerName` (the other individual), since neither of those is
-  // necessarily what a coordinator thinks to search for. See displayName().
-  partyName: string;
   // Geo (populated by geocoding on save), same pattern as Group.
   lat?: number | null;
   lng?: number | null;
+  // Set by the DB trigger; used to detect a stale/conflicting save.
+  updatedAt?: string;
+}
+
+/** One individual, linked to the Party that holds their matching/placement
+ * info. Deliberately minimal — just enough to identify and contact this
+ * specific person; everything else lives on their Party. */
+export interface Person {
+  id: string;
+  partyId: string;
+  name: string;
+  email: string;
+  phone: string;
   // Set by the DB trigger; used to detect a stale/conflicting save.
   updatedAt?: string;
 }
@@ -128,14 +134,15 @@ export const DAY_LONG: Record<DayShort, string> = {
   Sun: "Sunday",
 };
 
-/** One entry in a person's outreach log — append-only, timestamped, and
+/** One entry in a party's outreach log — append-only, timestamped, and
  * auto-attributed to whichever coordinator logged it server-side. Exists
  * specifically to prevent double-messaging: multiple coordinators working
- * the same list can see at a glance whether (and when) someone was already
- * reached out to, rather than trusting a single overwritable field. */
+ * the same list can see at a glance whether (and when) someone already
+ * reached out to this household, rather than trusting a single overwritable
+ * field or tracking it per individual. */
 export interface ContactLogEntry {
   id: string;
-  personId: string;
+  partyId: string;
   contactedBy: string | null;
   note: string;
   createdAt: string;
@@ -148,19 +155,19 @@ export function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-type PartyFields = Pick<Person, "name" | "partySize" | "partyName">;
-
-/** The name to search for and headline everywhere a person's summary
- * appears — the connected party's name (e.g. "The Smiths") when this is a
- * party of 2+ that has one set, otherwise just this person's own name. */
-export function displayName(p: PartyFields): string {
-  return p.partySize > 1 && p.partyName.trim() ? p.partyName.trim() : p.name;
+/** The name to search for and headline everywhere a party's summary
+ * appears — the party's own name (e.g. "The Griers") when it has one set,
+ * otherwise its members' names joined together ("Will Grier & Sarah
+ * Grier"), or "Unnamed party" for the (should-never-happen) empty case. */
+export function partyDisplayName(party: Pick<Party, "partyName">, members: Person[]): string {
+  if (party.partyName.trim()) return party.partyName.trim();
+  if (members.length === 0) return "Unnamed party";
+  return partyMemberNames(members);
 }
 
-/** "John Smith & Sarah Smith" for a party of 2+ with a partner name set,
- * null for a solo record — so callers can show who's actually in the party
- * right under the (possibly non-individual) display name above. */
-export function partyDetail(p: Pick<Person, "name" | "partnerName" | "partySize">): string | null {
-  if (p.partySize <= 1) return null;
-  return p.partnerName.trim() ? `${p.name} & ${p.partnerName.trim()}` : p.name;
+/** "Will Grier & Sarah Grier" — always available regardless of whether the
+ * party has an explicit name set, so callers can show who's actually in a
+ * party right under its (possibly non-individual) display name. */
+export function partyMemberNames(members: Person[]): string {
+  return members.map((m) => m.name).join(" & ");
 }

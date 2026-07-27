@@ -1,17 +1,18 @@
 "use client";
 
+import { Fragment } from "react";
 import { useRouter } from "next/navigation";
-import type { Group, Person } from "@/lib/types";
-import { displayName, initialsOf, partyDetail } from "@/lib/types";
+import type { Group, Party, Person } from "@/lib/types";
+import { initialsOf, partyDisplayName, partyMemberNames } from "@/lib/types";
 import { Avatar, LifeTag, PartyTag, StatusPill } from "@/components/ui";
 import { SearchIcon } from "@/components/icons";
 
-export function EmptyState({ label, hasFilters }: { label: "groups" | "people"; hasFilters: boolean }) {
+export function EmptyState({ label, hasFilters }: { label: "groups" | "parties"; hasFilters: boolean }) {
   return (
     <div className="mt-10 px-4 text-center text-[13px] font-semibold text-[var(--faint)]">
       {hasFilters
         ? `No ${label} match your search/filters.`
-        : `No ${label} yet — click "New ${label === "groups" ? "group" : "person"}" to add one.`}
+        : `No ${label} yet — click "New ${label === "groups" ? "group" : "party"}" to add one.`}
     </div>
   );
 }
@@ -69,10 +70,12 @@ export function GroupTable({
   );
 }
 
-export function PersonTable({
+export function PartyTable({
+  parties,
   people,
   onSelect,
 }: {
+  parties: Party[];
   people: Person[];
   onSelect: (id: string) => void;
 }) {
@@ -90,52 +93,74 @@ export function PersonTable({
         </tr>
       </thead>
       <tbody>
-        {people.map((p) => (
-          <tr
-            key={p.id}
-            onClick={() => onSelect(p.id)}
-            className="cursor-pointer border-b border-[var(--panel-4)] transition-colors hover:bg-[var(--panel-1)]"
-          >
-            <td className={td}>
-              <span className="flex items-center gap-2">
-                <Avatar initials={initialsOf(displayName(p))} size={24} tone="muted" />
-                <span className="flex flex-col">
-                  <span className="flex items-center gap-1.5">
-                    <span className="font-[family-name:var(--font-fredoka)] font-semibold">
-                      {displayName(p)}
-                    </span>
-                    <PartyTag partySize={p.partySize} />
-                  </span>
-                  {partyDetail(p) && (
-                    <span className="text-[11px] font-semibold text-[var(--faint)]">
-                      {partyDetail(p)}
-                    </span>
-                  )}
-                </span>
-              </span>
-            </td>
-            <td className={td}>{p.area || "—"}</td>
-            <td className={td}>
-              <LifeTag life={p.life} />
-            </td>
-            <td className={td}>
-              <StatusPill status={p.status} />
-            </td>
-            <td className={`${td} text-right`}>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  router.push(`/?person=${p.id}`);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--brand-blue-light)] px-2.5 py-1 text-[11.5px] font-bold text-[var(--brand-blue)] transition-colors hover:bg-[var(--panel-2)]"
+        {parties.map((pt) => {
+          const members = people.filter((p) => p.partyId === pt.id);
+          return (
+            <Fragment key={pt.id}>
+              <tr
+                onClick={() => onSelect(pt.id)}
+                className="cursor-pointer border-b border-[var(--panel-4)] transition-colors hover:bg-[var(--panel-1)]"
               >
-                <SearchIcon width={11} height={11} />
-                Find for
-              </button>
-            </td>
-          </tr>
-        ))}
+                <td className={td}>
+                  <span className="flex items-center gap-2">
+                    <Avatar initials={initialsOf(partyDisplayName(pt, members))} size={24} tone="muted" />
+                    <span className="flex flex-col">
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-[family-name:var(--font-fredoka)] font-semibold">
+                          {partyDisplayName(pt, members)}
+                        </span>
+                        <PartyTag partySize={members.length} />
+                      </span>
+                      {members.length > 1 && (
+                        <span className="text-[11px] font-semibold text-[var(--faint)]">
+                          {partyMemberNames(members)}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                </td>
+                <td className={td}>{pt.area || "—"}</td>
+                <td className={td}>
+                  <LifeTag life={pt.life} />
+                </td>
+                <td className={td}>
+                  <StatusPill status={pt.status} />
+                </td>
+                <td className={`${td} text-right`}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/?party=${pt.id}`);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--brand-blue-light)] px-2.5 py-1 text-[11.5px] font-bold text-[var(--brand-blue)] transition-colors hover:bg-[var(--panel-2)]"
+                  >
+                    <SearchIcon width={11} height={11} />
+                    Find for
+                  </button>
+                </td>
+              </tr>
+              {members.length > 1 &&
+                members.map((m) => (
+                  <tr
+                    key={m.id}
+                    onClick={() => onSelect(pt.id)}
+                    className="cursor-pointer border-b border-[var(--panel-4)] bg-[var(--panel-1)] transition-colors hover:bg-[var(--panel-2)]"
+                  >
+                    <td className={`${td} pl-11`}>
+                      <span className="flex items-center gap-2">
+                        <Avatar initials={initialsOf(m.name)} size={18} tone="muted" />
+                        <span className="text-[12.5px] font-semibold">{m.name}</span>
+                      </span>
+                    </td>
+                    <td colSpan={4} className={`${td} text-[12px] font-medium text-[var(--faint)]`}>
+                      {[m.email, m.phone].filter(Boolean).join(" · ") || "No contact info on file"}
+                    </td>
+                  </tr>
+                ))}
+            </Fragment>
+          );
+        })}
       </tbody>
     </table>
   );

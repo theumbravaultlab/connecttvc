@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { href: "/directory/groups", label: "Home Groups" },
-  { href: "/directory/people", label: "People" },
+  { href: "/directory/parties", label: "Parties" },
 ] as const;
 
 export function DirectoryNav() {

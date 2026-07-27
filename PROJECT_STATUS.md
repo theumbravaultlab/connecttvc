@@ -1,6 +1,6 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-07-26 · commit `804b733` (pending: this batch not yet committed)
+Last updated: 2026-07-26 · commit `b104f47` (pending: this batch not yet committed)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -421,24 +421,38 @@ supabase/
   011_contact_log.sql            — new contact_log table (append-only outreach history per
                                  person, leader-only RLS); CONFIRMED RUN
   012_person_party_name.sql      — adds people.party_name, the connected/searchable name for a
-                                 party of 2+ (e.g. "The Smiths"); NOT CONFIRMED RUN
+                                 party of 2+ (e.g. "The Smiths"); CONFIRMED RUN
+  013_party_split.sql            — the big one: introduces a real `parties` table and moves every
+                                 matching/status/placement field off `people` onto it; `people`
+                                 becomes just name/email/phone + a party_id link. Preserves any
+                                 existing plain-text `partner_name` as a real second person row
+                                 before dropping that column. NOT CONFIRMED RUN — see the new
+                                 "Party/Person split" section below before running this one.
+  014_bulk_sample_data.sql       — generated (not hand-written) by scripts/generate-sample-data.mjs;
+                                 wipes groups/parties/people/contact_log and inserts 100 groups +
+                                 350 parties (200 solo, 150 two-person) + 500 people. Requires
+                                 013 already applied (needs the parties table). NOT CONFIRMED RUN
+                                 — re-run the generator any time for a fresh random batch instead
+                                 of reusing this exact file.
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (optional)
 ```
 
 **Current live/production status: schema.sql, seed.sql, 002, 003, 004,
-006, 007, 008, 010, and 011 are all confirmed run. `005_sample_data_dfw.sql`
+006, 007, 008, 010, 011, and 012 are all confirmed run. `005_sample_data_dfw.sql`
 has deliberately never been run** — that's the explicit call the project
 owner made when going live (see "Product direction" and the go-live section
 above): production only has the original ~5+5 seed.sql rows, not the
 320-group/600-person fake DFW dataset, and 005 stays unrun until real data
-or a deliberate decision to demo with sample data. `012_person_party_name.sql`
-is **not yet confirmed run** — run it before relying on the Party name
-field below.
+or a deliberate decision to demo with sample data. `013_party_split.sql`
+is **not yet confirmed run** — this one is a bigger deal than prior
+migrations (it drops real columns from `people`), so double-check the
+Supabase table editor after running it, before relying on anything in the
+"Party/Person split" section below.
 
 **This directly affects `009_couple_host_naming.sql`: its 320 `UPDATE ...
 WHERE id = 'gN'` statements target ids that only exist once 005 has been
@@ -463,23 +477,32 @@ any still-ungeocoded rows in the background the first time they're opened.
 
 ## Domain model summary
 
+**Superseded for Person/matching by the "Party/Person split" section
+further below** — `Person` no longer carries area/address/life stage/
+status/etc.; that all moved to a new `Party` record. Left below as-is for
+the Group half, which didn't change, and as a record of the model's
+history for Person/status.
+
 - **Group**: name, day, time, area (auto), host/co-host, life stage, status
   (**New**/**Open**/**Closed** — New=blue, Open=green, Closed=red; redesigned
   from an original 4-value Active/Forming/Paused/Full scheme), format
   (In-person/Hybrid/Online), frequency, capacity/members, childcare, address
   (private), lat/lng, description, etc.
-- **Person**: name, contact info, area (auto), address (private), lat/lng,
-  available days, time preference, life stage, childcare needed, status,
-  assigned group, notes.
-- **Person status** (redesigned from an original 3-value Unassigned/
-  Matched/Waitlisted scheme): **New** (blue) → **Actively Searching** (amber)
-  → **Waitlisted** (orange) → **Grouped** (green). Colors use the same
-  oklch-hue system as everything else (`src/lib/colors.ts`).
+- **Party** (was: Person): name/contact info now lives on the linked
+  `Person` row(s) instead; the Party itself holds area (auto), address
+  (private), lat/lng, available days, time preference, life stage,
+  childcare needed, status, assigned group, notes — everything "Finding
+  for" matches against, once per household regardless of member count.
+- **Party status** (formerly Person status; redesigned from an original
+  3-value Unassigned/Matched/Waitlisted scheme): **New** (blue) →
+  **Actively Searching** (amber) → **Waitlisted** (orange) → **Grouped**
+  (green). Colors use the same oklch-hue system as everything else
+  (`src/lib/colors.ts`).
 - Note: `groups.members` is a **manually-entered headcount**, deliberately
-  *not* auto-derived from `people` rows assigned to that group — `people`
-  only tracks individuals who went through the coordinator placement
+  *not* auto-derived from `parties` rows assigned to that group — `parties`
+  only tracks households that went through the coordinator placement
   pipeline, not a group's full real-world roster (confirmed by the seed data:
-  groups show 8–10 members while only 1–2 `people` rows reference them).
+  groups show 8–10 members while only 1–2 `parties` rows reference them).
   Auto-deriving would have been actively wrong. A UI tip nudges coordinators
   to update it manually when relevant.
 
@@ -1246,6 +1269,12 @@ succeeds. Not yet click-tested live — same standing constraint.
 
 ## Party structure follow-up: a distinct "party name" for search
 
+**Superseded by the "Party/Person split" section further below** — after
+this round shipped, the project owner kept pushing on the couples/
+households question and landed on a real linked-record model instead
+(`Person.partyName`/`displayName`/`partyDetail` described here no longer
+exist). Left in place as a record of how the thinking evolved.
+
 Continued brainstorming with the project owner on couples/households
 searching together (task 7 from the batch above): with everything living on
 one master `Person` record, what should coordinators actually search for —
@@ -1292,6 +1321,114 @@ succeeds. Not click-tested live — the app requires a real coordinator login
 (no seed/demo fallback since Supabase is configured), so this round's UI
 changes were verified by code review + the build pipeline only, same
 standing constraint as every other round.
+
+## Party/Person split: a real linked-record model for couples/households
+
+The project owner kept pushing on the couples/households question from the
+section above and landed somewhere structurally different: "a record for
+the Party and then connect two person records to it... I could search for
+'party or person'... find Will Grier and see he is associated with the
+Griers party and the other person in his party." That's a real relational
+model, not fields bolted onto one record — worth a design conversation
+before touching code, since it's the third iteration on this same question
+this session. Landed on, after weighing three options (universal Party vs.
+Party-only-for-2+ vs. a primary/secondary Person with no new table) and the
+project owner explicitly choosing the first: **every party gets a real
+`Party` record, even a solo searcher (a "party of one")** — one model
+everywhere, no branching in the app between "has a party" and "doesn't."
+
+**New data model** (`src/lib/types.ts`):
+- **`Party`** now holds everything that used to live on `Person` *except*
+  name/email/phone: `partyName`, `area`, `address`, `lat`/`lng`, `days`,
+  `timePref`, `life`, `age`, `interests`, `childcareNeeded`,
+  `accessibility`, `status` (renamed `PartyStatus`/`PARTY_STATUSES`),
+  `group`, `joined`, `notes`, `updatedAt`. No stored party size — it's
+  **derived** as `members.length` (the actual count of linked `Person`
+  rows), not a separate number that can drift from reality.
+- **`Person`** is now just individual identity: `id`, `partyId` (FK, not
+  null), `name`, `email`, `phone`, `updatedAt`. `partnerName`/`partySize`/
+  `partyName` are gone from it entirely — superseded by real linked rows.
+- **`displayName`/`partyDetail` replaced by `partyDisplayName(party,
+  members)`/`partyMemberNames(members)`** — same idea (headline name, then
+  a "who's actually in this party" subline), just operating on a party +
+  its member list instead of one overloaded record.
+- **`contact_log.party_id`** (renamed from `person_id`) — outreach is
+  logged once per household regardless of which member you actually
+  contacted, which was always the point of the log.
+
+**Migration `supabase/013_party_split.sql`** — the biggest migration this
+project has run: creates `parties`, backfills one party per existing person
+(reusing each person's own `id` as its party's `id`, so `contact_log`'s
+existing values keep working through a plain column rename), **preserves
+any existing plain-text `partner_name` as a real second `people` row**
+before dropping that column (otherwise a partner's name would just be
+lost, not migrated), then drops the moved columns from `people` and adds
+`people.party_id`. Also moves the CHECK constraints and the FK index from
+`people` to `parties`. **Not yet confirmed run** — this one is a bigger
+deal than prior migrations (real column drops), so check the Supabase
+table editor after running it.
+
+**App layer**: `data.ts` gained `getParties()`/`rowToParty` (mirrors
+`getGroups`/`getPeople`); `getPeople()` now returns the slim shape.
+`actions.ts` gained `saveParty`/`deleteParty` (same geocode-on-save pattern
+as `saveGroup`, since Party now owns the address); `savePerson` got
+*simpler* — no more geocoding, just a conflict check plus an upsert of
+name/email/phone/party_id. `DirectoryData.tsx`'s shared context gained
+`parties`/`setParties` alongside `groups`/`people`, fetched once in
+`(app)/layout.tsx` the same way as everything else.
+
+**Directory pages, renamed and restructured** (same `*ListPage`/
+`*EditPage`/`*Form` pattern used for Groups):
+- `PeopleListPage.tsx` → `PartiesListPage.tsx`, `PersonEditPage.tsx` →
+  `PartyEditPage.tsx`, `PersonSearch.tsx` → `PartySearch.tsx`,
+  `PersonTable` → `PartyTable` (in `tables.tsx`). Routes moved from
+  `/directory/people/**` to `/directory/parties/**`; `DirectoryNav.tsx`'s
+  tab is now "Parties"; the Finder's deep-link query param is now `?party=`.
+- `PersonForm.tsx` → `PartyForm.tsx`: same Location/Fit/Assignment/Outreach
+  sections as before (now reading `party.*`), but the old "Household"
+  section (party size/partner name text fields) is replaced by a real
+  **"Members" section** — a list of the party's linked `Person` rows
+  (inline Name/Email/Phone), "+ Add member", and a per-row "Remove"
+  (reusing the existing `ConfirmDialog`). A new member is staged locally
+  (client-generated `new-<timestamp>` id, same idiom as "New Group") and
+  only actually persisted when the page's single Save button is clicked —
+  `PartyEditPage.tsx`'s `handleSave` calls `saveParty` and
+  `Promise.all(members.map(savePerson))` together in one action. Removing
+  an already-persisted member calls `deletePerson` immediately (confirmed),
+  same as every other delete in this app; removing a not-yet-saved staged
+  member just drops it from local state. "New party" now creates a blank
+  Party **and** one blank linked Person in the same click, so it still
+  lands you on an editable name field immediately.
+- `PartySearch.tsx` matches a party by its own name *or* any member's
+  name, landing on the party either way — the exact "find Will Grier, see
+  he's part of the Griers party, see the other person in it" behavior
+  asked for. Headline is `partyDisplayName`; the member-names subline is
+  now always shown (not just when an explicit party name is set).
+
+**Finder/Map**: `Finder.tsx`'s matching state (`personId`/`person` →
+`partyId`/`party`) and every matching read (`days`, `area`, `life`, `age`,
+`childcareNeeded`, `lat`/`lng` for drive times) now come from `Party`
+instead of `Person` — the ranked "might still work" suggestions logic
+itself didn't need to change, just its field source. `FinderMap.tsx`'s
+`PersonPin`/`StatusPersonPin` are now `PartyPin`/`StatusPartyPin`, each
+taking `{ party, members }` for initials/title/status-color.
+`GroupForm.tsx`'s "Assigned people" roster is now "Assigned parties",
+reading `parties.filter(pt => pt.group === group.id)`.
+
+**Reports/AppShell**: `ReportsPage.tsx`'s per-status/childcare/life-stage/
+city aggregates and `AppShell.tsx`'s header stats now iterate `parties`
+instead of `people` (labels updated to match: "Total parties", "Parties
+placed", etc.).
+
+**Seed data** (`seed.ts`): `SEED_PARTIES` (5 parties) + a slim
+`SEED_PEOPLE` (6 people) — the "John Smith / partnerName Sarah Smith /
+partyName The Smiths" example from the prior round becomes one real party
+("The Smiths") with two linked Person rows (John Smith, Sarah Smith).
+
+Verified: `tsc`/`eslint` clean (0 problems), full production build
+succeeds (routes confirm `/directory/parties` and `/directory/parties/[id]`
+exist, old `/directory/people/**` is gone). Not click-tested live — same
+standing login-gated constraint as every round this session.
 
 ## What's built and verified working
 

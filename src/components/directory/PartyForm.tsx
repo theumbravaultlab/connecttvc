@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   LIFE_STAGES,
-  PERSON_STATUSES,
-  displayName,
+  PARTY_STATUSES,
   initialsOf,
-  partyDetail,
+  partyDisplayName,
+  partyMemberNames,
   type DayShort,
   type Group,
+  type Party,
   type Person,
 } from "@/lib/types";
 import {
@@ -21,109 +22,111 @@ import {
   TextInput,
   Toggle,
 } from "@/components/ui";
-import { ChevronDownIcon, EditIcon } from "@/components/icons";
+import { ChevronDownIcon, EditIcon, PlusIcon } from "@/components/icons";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { AddressAutocomplete } from "./AddressAutocomplete";
 import { SectionHeading, Field } from "./form-bits";
 import { ContactLog } from "./ContactLog";
 
-export function PersonForm({
-  person,
+export function PartyForm({
+  party,
+  members,
   groups,
   onPatch,
+  onAddMember,
+  onUpdateMember,
+  onRemoveMember,
 }: {
-  person: Person;
+  party: Party;
+  members: Person[];
   groups: Group[];
-  onPatch: (patch: Partial<Person>) => void;
+  onPatch: (patch: Partial<Party>) => void;
+  onAddMember: () => void;
+  onUpdateMember: (id: string, patch: Partial<Person>) => void;
+  onRemoveMember: (id: string) => void;
 }) {
-  const groupName =
-    groups.find((g) => g.id === person.group)?.name ?? "Unassigned";
+  const groupName = groups.find((g) => g.id === party.group)?.name ?? "Unassigned";
+  const [removeCandidate, setRemoveCandidate] = useState<Person | null>(null);
 
   const toggleDay = (d: DayShort) =>
     onPatch({
-      days: person.days.includes(d)
-        ? person.days.filter((x) => x !== d)
-        : [...person.days, d],
+      days: party.days.includes(d)
+        ? party.days.filter((x) => x !== d)
+        : [...party.days, d],
     });
 
   return (
     <div>
       {/* form header */}
       <div className="mb-4 flex items-center gap-3">
-        <Avatar initials={initialsOf(displayName(person))} size={40} />
+        <Avatar initials={initialsOf(partyDisplayName(party, members))} size={40} />
         <div>
           <h2 className="font-[family-name:var(--font-fredoka)] text-[21px] font-semibold text-[var(--ink)]">
-            {displayName(person) || "New member"}
+            {partyDisplayName(party, members) || "New party"}
           </h2>
           <p className="text-[12px] font-semibold text-[var(--faint)]">
-            {partyDetail(person) ? `${partyDetail(person)} · ` : ""}
+            {members.length > 1 ? `${partyMemberNames(members)} · ` : ""}
             Group · {groupName}
           </p>
         </div>
       </div>
 
-      <SectionHeading>Contact</SectionHeading>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field full label="Full name">
-          <TextInput
-            value={person.name}
-            onChange={(e) => onPatch({ name: e.target.value })}
-          />
-        </Field>
-        <Field label="Email">
-          <TextInput
-            type="email"
-            value={person.email}
-            onChange={(e) => onPatch({ email: e.target.value })}
-          />
-        </Field>
-        <Field label="Phone">
-          <TextInput
-            type="tel"
-            value={person.phone}
-            onChange={(e) => onPatch({ phone: e.target.value })}
-          />
-        </Field>
+      <SectionHeading>Members</SectionHeading>
+      <Field full label="Party name" tag="What shows up in search for a party of 2+">
+        <TextInput
+          value={party.partyName}
+          placeholder="e.g. The Griers"
+          onChange={(e) => onPatch({ partyName: e.target.value })}
+        />
+      </Field>
+      <div className="mt-3 flex flex-col gap-2">
+        {members.map((m) => (
+          <div key={m.id} className="rounded-xl bg-[var(--panel-1)] p-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <TextInput
+                value={m.name}
+                placeholder="Name"
+                onChange={(e) => onUpdateMember(m.id, { name: e.target.value })}
+              />
+              <TextInput
+                type="email"
+                value={m.email}
+                placeholder="Email"
+                onChange={(e) => onUpdateMember(m.id, { email: e.target.value })}
+              />
+              <TextInput
+                type="tel"
+                value={m.phone}
+                placeholder="Phone"
+                onChange={(e) => onUpdateMember(m.id, { phone: e.target.value })}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setRemoveCandidate(m)}
+              className="mt-2 text-[11.5px] font-bold text-[oklch(0.55_0.18_20)] hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
       </div>
-
-      <SectionHeading>Household</SectionHeading>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Party size" tag="How many spots they need">
-          <TextInput
-            type="number"
-            min={1}
-            value={person.partySize}
-            onChange={(e) =>
-              onPatch({ partySize: Math.max(1, Number(e.target.value) || 1) })
-            }
-          />
-        </Field>
-        <Field label="Partner name" tag="If searching together">
-          <TextInput
-            value={person.partnerName}
-            placeholder="e.g. Sarah Smith"
-            onChange={(e) => onPatch({ partnerName: e.target.value })}
-          />
-        </Field>
-        <Field
-          full
-          label="Party name"
-          tag="What shows up in search for a party of 2+"
-        >
-          <TextInput
-            value={person.partyName}
-            placeholder="e.g. The Smiths"
-            onChange={(e) => onPatch({ partyName: e.target.value })}
-          />
-        </Field>
-      </div>
+      <button
+        type="button"
+        onClick={onAddMember}
+        className="mt-2 flex items-center gap-1.5 rounded-full border border-[var(--brand-blue-light)] px-3 py-1.5 text-[12.5px] font-bold text-[var(--brand-blue)] transition-colors hover:bg-[var(--panel-2)]"
+      >
+        <PlusIcon width={13} height={13} />
+        Add member
+      </button>
 
       <SectionHeading>Location &amp; availability</SectionHeading>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Time preference">
           <SelectInput
-            value={person.timePref}
+            value={party.timePref}
             onChange={(e) =>
-              onPatch({ timePref: e.target.value as Person["timePref"] })
+              onPatch({ timePref: e.target.value as Party["timePref"] })
             }
           >
             {["Mornings", "Afternoons", "Evenings", "Flexible"].map((t) => (
@@ -133,19 +136,19 @@ export function PersonForm({
         </Field>
         <Field full label="Available days" matching>
           <div className="pt-1">
-            <DayPills value={person.days} onToggle={toggleDay} />
+            <DayPills value={party.days} onToggle={toggleDay} />
           </div>
         </Field>
         <Field full label="Home address" tag="Members only">
           <AddressAutocomplete
-            value={person.address}
+            value={party.address}
             onChange={(address) => onPatch({ address })}
             onPlaceSelected={({ city }) => city && onPatch({ area: city })}
             placeholder="Start typing an address…"
           />
         </Field>
         <Field label="Home city" matching>
-          <ReadOnlyValue value={person.area} placeholder="From address" />
+          <ReadOnlyValue value={party.area} placeholder="From address" />
         </Field>
       </div>
 
@@ -153,8 +156,8 @@ export function PersonForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Life stage" matching>
           <SelectInput
-            value={person.life}
-            onChange={(e) => onPatch({ life: e.target.value as Person["life"] })}
+            value={party.life}
+            onChange={(e) => onPatch({ life: e.target.value as Party["life"] })}
           >
             {LIFE_STAGES.map((l) => (
               <option key={l}>{l}</option>
@@ -166,31 +169,31 @@ export function PersonForm({
             type="number"
             min={0}
             max={120}
-            value={person.age ?? ""}
+            value={party.age ?? ""}
             onChange={(e) => onPatch({ age: e.target.value ? Number(e.target.value) : null })}
           />
         </Field>
         <Field label="Childcare needed" matching>
           <div className="flex items-center gap-2 pt-1">
             <Toggle
-              on={person.childcareNeeded}
+              on={party.childcareNeeded}
               onChange={(v) => onPatch({ childcareNeeded: v })}
               label="Childcare needed"
             />
             <span className="text-[12px] font-semibold text-[var(--muted)]">
-              {person.childcareNeeded ? "Yes" : "No"}
+              {party.childcareNeeded ? "Yes" : "No"}
             </span>
           </div>
         </Field>
         <Field full label="Interests">
           <TextInput
-            value={person.interests}
+            value={party.interests}
             onChange={(e) => onPatch({ interests: e.target.value })}
           />
         </Field>
         <Field full label="Accessibility needs">
           <TextInput
-            value={person.accessibility}
+            value={party.accessibility}
             onChange={(e) => onPatch({ accessibility: e.target.value })}
           />
         </Field>
@@ -200,26 +203,26 @@ export function PersonForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Status">
           <SelectInput
-            value={person.status}
+            value={party.status}
             onChange={(e) =>
-              onPatch({ status: e.target.value as Person["status"] })
+              onPatch({ status: e.target.value as Party["status"] })
             }
           >
-            {PERSON_STATUSES.map((s) => (
+            {PARTY_STATUSES.map((s) => (
               <option key={s}>{s}</option>
             ))}
           </SelectInput>
         </Field>
         <Field label="Member since">
           <TextInput
-            value={person.joined}
+            value={party.joined}
             onChange={(e) => onPatch({ joined: e.target.value })}
           />
         </Field>
         <Field full label="Assigned group">
           <AssignedGroupPicker
             groups={groups}
-            selectedId={person.group}
+            selectedId={party.group}
             onSelect={(group) =>
               // Assigning a group auto-sets status to Grouped; clearing it
               // back to Unassigned auto-reverts to Actively Searching —
@@ -231,14 +234,26 @@ export function PersonForm({
         </Field>
         <Field full label="Leader notes">
           <TextArea
-            value={person.notes}
+            value={party.notes}
             onChange={(e) => onPatch({ notes: e.target.value })}
           />
         </Field>
       </div>
 
       <SectionHeading>Outreach</SectionHeading>
-      <ContactLog personId={person.id} />
+      <ContactLog partyId={party.id} />
+
+      <ConfirmDialog
+        open={removeCandidate != null}
+        title={`Remove ${removeCandidate?.name.trim() || "this member"}?`}
+        message="This can't be undone — they'll be permanently removed from this party."
+        confirmLabel="Remove"
+        onConfirm={() => {
+          if (removeCandidate) onRemoveMember(removeCandidate.id);
+          setRemoveCandidate(null);
+        }}
+        onCancel={() => setRemoveCandidate(null)}
+      />
     </div>
   );
 }

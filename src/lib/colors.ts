@@ -1,4 +1,4 @@
-import type { GroupStatus, LifeStage, PersonStatus } from "./types";
+import type { GroupStatus, LifeStage, PartyStatus } from "./types";
 
 // ============================================================
 // Hue-based color system (from design handoff). All computed
@@ -25,19 +25,19 @@ export function lifeColors(life: LifeStage) {
   };
 }
 
-// Status hues shared by group + person status pills.
+// Status hues shared by group + party status pills.
 const STATUS_HUE: Record<string, number> = {
   // groups
   Open: 150,
   Closed: 20,
-  // people (New is also a group status; same hue for both)
+  // parties (New is also a group status; same hue for both)
   New: 235,
   "Actively Searching": 70,
   Waitlisted: 35,
   Grouped: 150,
 };
 
-export function statusColors(status: GroupStatus | PersonStatus) {
+export function statusColors(status: GroupStatus | PartyStatus) {
   const h = STATUS_HUE[status] ?? 235;
   return {
     bg: `oklch(0.95 0.055 ${h})`,
@@ -48,7 +48,7 @@ export function statusColors(status: GroupStatus | PersonStatus) {
 /** Vivid, single-color fill for a status-colored map pin — same hue as
  * statusColors(), just at pin-fill lightness/chroma instead of pill
  * background/foreground. */
-export function statusSolid(status: GroupStatus | PersonStatus): string {
+export function statusSolid(status: GroupStatus | PartyStatus): string {
   const h = STATUS_HUE[status] ?? 235;
   return `oklch(0.62 0.15 ${h})`;
 }

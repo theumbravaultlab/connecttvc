@@ -3,8 +3,9 @@
 import { TrashIcon } from "@/components/icons";
 
 /** In-app replacement for window.confirm(), used for destructive actions
- * (currently: deleting a Group or Person) so the confirmation matches the
- * app's own look instead of a native browser popup. */
+ * (currently: deleting a Group, a Party, or a party's member) so the
+ * confirmation matches the app's own look instead of a native browser
+ * popup. */
 export function ConfirmDialog({
   open,
   title,

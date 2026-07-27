@@ -6,12 +6,13 @@ import {
   DAY_LONG,
   GROUP_STATUSES,
   LIFE_STAGES,
-  displayName,
   initialsOf,
-  partyDetail,
+  partyDisplayName,
+  partyMemberNames,
   type DayShort,
   type Group,
   type GroupStatus,
+  type Party,
   type Person,
 } from "@/lib/types";
 import { ageMatchesRange } from "@/lib/ageRange";
@@ -31,17 +32,19 @@ import { getTravelTimesToGroups } from "@/app/actions";
 import type { TravelTime } from "@/lib/routes";
 import { FinderMap } from "./FinderMap";
 import { GroupCard } from "./GroupCard";
-import { PersonSearch } from "./PersonSearch";
+import { PartySearch } from "./PartySearch";
 
 const DAY_FILTERS: DayShort[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const EMPTY_TRAVEL_TIMES: Record<string, TravelTime> = {};
 
 export function Finder({
   groups,
+  parties,
   people,
 }: {
   groups: Group[];
   /** Leader-only: enables the "Finding for" matcher. Empty for public. */
+  parties: Party[];
   people: Person[];
 }) {
   const router = useRouter();
@@ -52,26 +55,26 @@ export function Finder({
   const [life, setLife] = useState("All");
   const [status, setStatus] = useState<GroupStatus | "All">("All");
   // Picks up a deep-link from the Directory's "Find for" button
-  // (?person=<id>) directly in the initial state — searchParams and people
+  // (?party=<id>) directly in the initial state — searchParams and parties
   // are both already available synchronously at first render (this route
   // is fully dynamic, so this even resolves correctly during SSR, not just
   // after a client-side effect), so this needs no effect at all.
-  const [personId, setPersonId] = useState<string>(() => {
-    const paramPersonId = searchParams.get("person");
-    return paramPersonId && people.some((p) => p.id === paramPersonId) ? paramPersonId : "";
+  const [partyId, setPartyId] = useState<string>(() => {
+    const paramPartyId = searchParams.get("party");
+    return paramPartyId && parties.some((p) => p.id === paramPartyId) ? paramPartyId : "";
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
-  // Tagged with the person it was fetched for, so switching to a person
-  // with no location (or whose matches all lack one) can never display an
-  // unrelated person's stale distances — simpler and more robust than
-  // clearing this back to empty via an effect on every person change.
+  // Tagged with the party it was fetched for, so switching to a party with
+  // no location (or whose matches all lack one) can never display an
+  // unrelated party's stale distances — simpler and more robust than
+  // clearing this back to empty via an effect on every party change.
   const [travelTimes, setTravelTimes] = useState<{
-    personId: string;
+    partyId: string;
     times: Record<string, TravelTime>;
   } | null>(null);
   // Off by default — keeps the map uncluttered until a coordinator actually
-  // wants to see people on it. Persists across person/group selection
+  // wants to see people on it. Persists across party/group selection
   // changes (unlike the "matched on" toggles below), since it's a general
   // map display preference, not part of any one search.
   const [showAllPeople, setShowAllPeople] = useState(false);
@@ -80,29 +83,33 @@ export function Finder({
   const statusId = useId();
   const statusId2 = useId();
 
-  const person = people.find((p) => p.id === personId) ?? null;
+  const party = parties.find((p) => p.id === partyId) ?? null;
+  const partyMembers = useMemo(
+    () => (party ? people.filter((p) => p.partyId === party.id) : []),
+    [party, people],
+  );
   const effectiveTravelTimes =
-    travelTimes && travelTimes.personId === person?.id ? travelTimes.times : EMPTY_TRAVEL_TIMES;
+    travelTimes && travelTimes.partyId === party?.id ? travelTimes.times : EMPTY_TRAVEL_TIMES;
 
-  // Cleans the URL after picking up a ?person= deep-link (see the personId
+  // Cleans the URL after picking up a ?party= deep-link (see the partyId
   // initializer above) so a later refresh doesn't keep reapplying it. This
   // is the one piece of the deep-link that's a genuine side effect (history
   // navigation) rather than state — everything else already happened
   // during the initial render, so this effect calls no setState at all.
   useEffect(() => {
-    if (searchParams.get("person")) {
+    if (searchParams.get("party")) {
       router.replace("/");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When finding for a specific person, each "matched on" criterion (their
+  // When finding for a specific party, each "matched on" criterion (their
   // available days, city, life stage, age, childcare need) can be
   // individually toggled off/back on to explore groups that wouldn't
-  // otherwise qualify — reset to "all active" whenever the selected person
+  // otherwise qualify — reset to "all active" whenever the selected party
   // changes. Adjusted directly during render (React's documented pattern
   // for "reset state when an id changes") rather than in an effect, using
-  // `prevPersonId` to detect the change — this avoids the extra render an
+  // `prevPartyId` to detect the change — this avoids the extra render an
   // effect-based reset would otherwise cause.
   const [activeDays, setActiveDays] = useState<Set<DayShort>>(new Set());
   const [areaActive, setAreaActive] = useState(true);
@@ -110,19 +117,19 @@ export function Finder({
   const [ageActive, setAgeActive] = useState(true);
   const [childcareActive, setChildcareActive] = useState(true);
   // "Other groups that might work" — collapsed by default so it doesn't add
-  // permanent visual weight; collapses again whenever the person changes.
+  // permanent visual weight; collapses again whenever the party changes.
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [prevPersonId, setPrevPersonId] = useState<string | null>(null);
-  if (person && person.id !== prevPersonId) {
-    setPrevPersonId(person.id);
-    setActiveDays(new Set(person.days));
+  const [prevPartyId, setPrevPartyId] = useState<string | null>(null);
+  if (party && party.id !== prevPartyId) {
+    setPrevPartyId(party.id);
+    setActiveDays(new Set(party.days));
     setAreaActive(true);
     setLifeActive(true);
     setAgeActive(true);
     setChildcareActive(true);
     setShowSuggestions(false);
-  } else if (!person && prevPersonId !== null) {
-    setPrevPersonId(null);
+  } else if (!party && prevPartyId !== null) {
+    setPrevPartyId(null);
   }
 
   // Area is auto-derived from each address's city (no fixed list anymore),
@@ -134,14 +141,14 @@ export function Finder({
 
   // Derived filtered list.
   const filtered = useMemo(() => {
-    if (person) {
+    if (party) {
       return groups.filter((g) => {
         if (status !== "All" && g.status !== status) return false;
         if (activeDays.size > 0 && !activeDays.has(g.day)) return false;
-        if (areaActive && g.area !== person.area) return false;
-        if (lifeActive && g.life !== person.life) return false;
-        if (ageActive && !ageMatchesRange(person.age, g.ageRange)) return false;
-        if (childcareActive && person.childcareNeeded && !g.childcare) return false;
+        if (areaActive && g.area !== party.area) return false;
+        if (lifeActive && g.life !== party.life) return false;
+        if (ageActive && !ageMatchesRange(party.age, g.ageRange)) return false;
+        if (childcareActive && party.childcareNeeded && !g.childcare) return false;
         return true;
       });
     }
@@ -156,15 +163,15 @@ export function Finder({
       }
       return true;
     });
-  }, [groups, person, days, areas, life, status, q, activeDays, areaActive, lifeActive, ageActive, childcareActive]);
+  }, [groups, party, days, areas, life, status, q, activeDays, areaActive, lifeActive, ageActive, childcareActive]);
 
   // When a city isn't narrowing the result (either the "Finding for"
-  // person's city match is toggled off, since areaActive already reuses the
-  // existing Routes API travel-time data computed for that person below),
+  // party's city match is toggled off, since areaActive already reuses the
+  // existing Routes API travel-time data computed for that party below),
   // fall back to sorting by Google Maps drive distance, closest first, so
   // the list stays useful without a city to anchor it.
   const displayGroups = useMemo(() => {
-    if (!person || areaActive) return filtered;
+    if (!party || areaActive) return filtered;
     return [...filtered].sort((a, b) => {
       const ta = effectiveTravelTimes[a.id]?.minutes;
       const tb = effectiveTravelTimes[b.id]?.minutes;
@@ -173,25 +180,25 @@ export function Finder({
       if (tb == null) return -1;
       return ta - tb;
     });
-  }, [filtered, person, areaActive, effectiveTravelTimes]);
+  }, [filtered, party, areaActive, effectiveTravelTimes]);
 
   // Ranked "might still work" candidates — every group the strict match
   // excludes, scored by how many of the currently-*active* "matched on"
   // criteria it still satisfies (a toggled-off criterion never counts
   // against a group, same as the strict filter above). Only meaningful in
-  // person-matched mode; empty otherwise. Capped at 6 so it stays a quick
+  // party-matched mode; empty otherwise. Capped at 6 so it stays a quick
   // scan, not a second full list.
   const suggestions = useMemo(() => {
-    if (!person) return [];
+    if (!party) return [];
     const criteria = (
       [
         activeDays.size > 0 && { key: "Day", satisfies: (g: Group) => activeDays.has(g.day) },
-        areaActive && { key: person.area || "City", satisfies: (g: Group) => g.area === person.area },
-        lifeActive && { key: person.life, satisfies: (g: Group) => g.life === person.life },
-        ageActive && { key: "Age", satisfies: (g: Group) => ageMatchesRange(person.age, g.ageRange) },
+        areaActive && { key: party.area || "City", satisfies: (g: Group) => g.area === party.area },
+        lifeActive && { key: party.life, satisfies: (g: Group) => g.life === party.life },
+        ageActive && { key: "Age", satisfies: (g: Group) => ageMatchesRange(party.age, g.ageRange) },
         childcareActive && {
           key: "Childcare",
-          satisfies: (g: Group) => !person.childcareNeeded || g.childcare,
+          satisfies: (g: Group) => !party.childcareNeeded || g.childcare,
         },
       ] as const
     ).filter((c): c is { key: string; satisfies: (g: Group) => boolean } => !!c);
@@ -210,7 +217,7 @@ export function Finder({
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score || a.group.name.localeCompare(b.group.name))
       .slice(0, 6);
-  }, [person, groups, filtered, status, activeDays, areaActive, lifeActive, ageActive, childcareActive]);
+  }, [party, groups, filtered, status, activeDays, areaActive, lifeActive, ageActive, childcareActive]);
 
   // Clear the selection if it falls out of the visible set (person or
   // filter change) — never auto-picks a replacement. A selected suggestion
@@ -224,16 +231,16 @@ export function Finder({
     setSelectedId(null);
   }
 
-  // Drive time from the selected person to every visible group, batched
+  // Drive time from the selected party to every visible group, batched
   // into one Routes API call. Depends on primitive lat/lng/id rather than
-  // the `person` object itself so editing an unrelated field elsewhere
+  // the `party` object itself so editing an unrelated field elsewhere
   // (e.g. in the Directory, since state is shared) doesn't trigger a
   // refetch. No synchronous setState here — an empty/no-destination case
   // just skips the fetch and lets `effectiveTravelTimes` (above) keep any
-  // stale state from being shown, tagged-by-personId, rather than this
+  // stale state from being shown, tagged-by-partyId, rather than this
   // effect needing to clear it itself.
   useEffect(() => {
-    if (!person || person.lat == null || person.lng == null) return;
+    if (!party || party.lat == null || party.lng == null) return;
     const candidates = [...filtered, ...suggestions.map((s) => s.group)].filter(
       (g, i, arr) => arr.findIndex((x) => x.id === g.id) === i,
     );
@@ -244,16 +251,16 @@ export function Finder({
       .map((g) => ({ id: g.id, lat: g.lat, lng: g.lng }));
     if (destinations.length === 0) return;
     let cancelled = false;
-    getTravelTimesToGroups({ lat: person.lat, lng: person.lng }, destinations).then(
+    getTravelTimesToGroups({ lat: party.lat, lng: party.lng }, destinations).then(
       (result) => {
-        if (!cancelled) setTravelTimes({ personId: person.id, times: result });
+        if (!cancelled) setTravelTimes({ partyId: party.id, times: result });
       },
     );
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [person?.id, person?.lat, person?.lng, filtered, suggestions]);
+  }, [party?.id, party?.lat, party?.lng, filtered, suggestions]);
 
   // Scroll the selected card to the top of the list container. Uses
   // getBoundingClientRect rather than offsetTop, since offsetTop is relative
@@ -272,8 +279,8 @@ export function Finder({
     }
   }, [selectedId]);
 
-  const clearPerson = () => {
-    setPersonId("");
+  const clearParty = () => {
+    setPartyId("");
     setSelectedId(null);
   };
 
@@ -317,13 +324,13 @@ export function Finder({
 
   // Who shows up as a status-colored pin on the map when "Show people" is
   // on: just the selected group's roster if one is selected, otherwise
-  // everyone. The "Finding for" person always keeps their own distinct
-  // pin (see FinderMap) so they're never duplicated into this set.
-  const statusPeople = useMemo(() => {
+  // everyone. The "Finding for" party always keeps its own distinct pin
+  // (see FinderMap) so it's never duplicated into this set.
+  const statusParties = useMemo(() => {
     if (!showAllPeople) return [];
-    const base = selectedId ? people.filter((p) => p.group === selectedId) : people;
-    return person ? base.filter((p) => p.id !== person.id) : base;
-  }, [showAllPeople, selectedId, people, person]);
+    const base = selectedId ? parties.filter((p) => p.group === selectedId) : parties;
+    return party ? base.filter((p) => p.id !== party.id) : base;
+  }, [showAllPeople, selectedId, parties, party]);
 
   // The map normally only shows strict-match pins — but if a coordinator
   // selects a suggested candidate (not part of the strict list), its pin
@@ -376,7 +383,7 @@ export function Finder({
         >
           {/* filter area */}
           <div className="shrink-0 border-b border-[var(--divider)] px-[15px] py-3.5">
-            {people.length > 0 && (
+            {parties.length > 0 && (
               <div className="mb-3">
                 <label
                   htmlFor={findingForId}
@@ -384,49 +391,50 @@ export function Finder({
                 >
                   Finding for
                 </label>
-                <PersonSearch
+                <PartySearch
                   id={findingForId}
+                  parties={parties}
                   people={people}
-                  selected={person}
+                  selected={party}
                   onSelect={(id) => {
-                    setPersonId(id);
+                    setPartyId(id);
                     setSelectedId(null);
                   }}
-                  onClear={clearPerson}
+                  onClear={clearParty}
                 />
               </div>
             )}
 
-            {person ? (
+            {party ? (
               <div className="rounded-xl border border-[var(--border-accent)] bg-[var(--panel-2)] p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <Avatar initials={initialsOf(displayName(person))} size={34} />
+                    <Avatar initials={initialsOf(partyDisplayName(party, partyMembers))} size={34} />
                     <div>
                       <div className="flex items-center gap-1.5 text-[13px] font-bold text-[var(--ink)]">
-                        {displayName(person)}
-                        <PartyTag partySize={person.partySize} />
+                        {partyDisplayName(party, partyMembers)}
+                        <PartyTag partySize={partyMembers.length} />
                       </div>
-                      {partyDetail(person) && (
+                      {partyMembers.length > 1 && (
                         <div className="text-[11.5px] font-bold text-[var(--brand-blue)]">
-                          {partyDetail(person)}
+                          {partyMemberNames(partyMembers)}
                         </div>
                       )}
                       <div className="text-[12px] font-semibold text-[var(--muted)]">
-                        {person.notes.split(",")[0]} · lives in {person.area}
+                        {party.notes.split(",")[0]} · lives in {party.area}
                       </div>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
-                      onClick={() => router.push(`/directory/people/${person.id}`)}
-                      aria-label="Edit person details"
+                      onClick={() => router.push(`/directory/parties/${party.id}`)}
+                      aria-label="Edit party details"
                       className="flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-bold text-[var(--brand-blue)] hover:bg-[var(--surface)]"
                     >
                       <EditIcon width={12} height={12} /> Edit
                     </button>
                     <button
-                      onClick={clearPerson}
+                      onClick={clearParty}
                       className="flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-bold text-[var(--brand-blue)] hover:bg-[var(--surface)]"
                     >
                       <XIcon width={12} height={12} /> Clear
@@ -442,7 +450,7 @@ export function Finder({
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {person.days.map((d) => (
+                  {party.days.map((d) => (
                     <MatchChip
                       key={d}
                       active={activeDays.has(d)}
@@ -459,17 +467,17 @@ export function Finder({
                     </MatchChip>
                   ))}
                   <MatchChip active={areaActive} onClick={() => setAreaActive((v) => !v)}>
-                    {person.area}
+                    {party.area}
                   </MatchChip>
                   <MatchChip active={lifeActive} onClick={() => setLifeActive((v) => !v)}>
-                    {person.life}
+                    {party.life}
                   </MatchChip>
-                  {person.age != null && (
+                  {party.age != null && (
                     <MatchChip active={ageActive} onClick={() => setAgeActive((v) => !v)}>
-                      Age {person.age}
+                      Age {party.age}
                     </MatchChip>
                   )}
-                  {person.childcareNeeded && (
+                  {party.childcareNeeded && (
                     <MatchChip active={childcareActive} onClick={() => setChildcareActive((v) => !v)}>
                       Needs childcare
                     </MatchChip>
@@ -557,7 +565,7 @@ export function Finder({
           <div ref={listRef} className="hw-scroll min-h-0 flex-1 overflow-y-auto p-3.5">
             {displayGroups.length === 0 ? (
               <div className="mt-10 px-4 text-center text-[13px] font-semibold text-[var(--faint)]">
-                {person && suggestions.length > 0
+                {party && suggestions.length > 0
                   ? "No exact matches — see other groups that might work below."
                   : "No groups match yet — try clearing a filter."}
               </div>
@@ -572,8 +580,8 @@ export function Finder({
                     group={g}
                     index={i}
                     selected={g.id === selectedId}
-                    greatFit={!!person && g.life === person.life}
-                    matchName={person?.name.split(" ")[0]}
+                    greatFit={!!party && g.life === party.life}
+                    matchName={partyMembers[0]?.name.split(" ")[0]}
                     travelTime={effectiveTravelTimes[g.id]}
                     onSelect={() => setSelectedId(g.id)}
                   />
@@ -581,7 +589,7 @@ export function Finder({
               </div>
             )}
 
-            {person && suggestions.length > 0 && (
+            {party && suggestions.length > 0 && (
               <div className="mt-3">
                 <button
                   type="button"
@@ -626,13 +634,14 @@ export function Finder({
         >
           <FinderMap
             groups={mapGroups}
-            person={person}
-            statusPeople={statusPeople}
+            party={party}
+            people={people}
+            statusParties={statusParties}
             selectedId={selectedId}
             onSelect={setSelectedId}
             showAllPeople={showAllPeople}
             onToggleShowAllPeople={() => setShowAllPeople((v) => !v)}
-            showPeopleAvailable={people.length > 0}
+            showPeopleAvailable={parties.length > 0}
           />
         </div>
       </div>
@@ -745,7 +754,7 @@ const SEARCH_SCOPES: { key: SearchScope; label: string }[] = [
 /** Free-text lookup for the browse-mode search box — types still live-
  * filter the list below exactly as before, but this layers an actual
  * dropdown of matching group names and matching cities on top (same
- * click-to-jump idiom as PersonSearch, including opening on focus/click
+ * click-to-jump idiom as PartySearch, including opening on focus/click
  * even before anything's typed, so there's a browsable list rather than
  * needing a name in mind). Picking a group selects it; picking a city
  * adds it to the City filter. A scope toggle (All/Groups/Cities, default

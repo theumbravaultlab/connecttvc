@@ -1,6 +1,6 @@
 import { getServerSupabase } from "./supabase/server";
-import { SEED_GROUPS, SEED_PEOPLE } from "./seed";
-import type { Group, Person } from "./types";
+import { SEED_GROUPS, SEED_PARTIES, SEED_PEOPLE } from "./seed";
+import type { Group, Party, Person } from "./types";
 
 // ============================================================
 // DB row <-> domain mappers (Postgres snake_case <-> camelCase)
@@ -36,12 +36,10 @@ function rowToGroup(r: any): Group {
   };
 }
 
-function rowToPerson(r: any): Person {
+function rowToParty(r: any): Party {
   return {
     id: String(r.id),
-    name: r.name,
-    email: r.email ?? "",
-    phone: r.phone ?? "",
+    partyName: r.party_name ?? "",
     area: r.area,
     address: r.address ?? "",
     age: r.age ?? null,
@@ -55,11 +53,19 @@ function rowToPerson(r: any): Person {
     group: r.group_id ? String(r.group_id) : null,
     joined: r.joined ?? "",
     notes: r.notes ?? "",
-    partySize: r.party_size ?? 1,
-    partnerName: r.partner_name ?? "",
-    partyName: r.party_name ?? "",
     lat: r.lat,
     lng: r.lng,
+    updatedAt: r.updated_at,
+  };
+}
+
+function rowToPerson(r: any): Person {
+  return {
+    id: String(r.id),
+    partyId: String(r.party_id),
+    name: r.name,
+    email: r.email ?? "",
+    phone: r.phone ?? "",
     updatedAt: r.updated_at,
   };
 }
@@ -85,6 +91,17 @@ export async function getGroups(): Promise<Group[]> {
     .order("name");
   if (error) throw new Error(`Couldn't load groups: ${error.message}`);
   return (data ?? []).map(rowToGroup);
+}
+
+export async function getParties(): Promise<Party[]> {
+  const supabase = await getServerSupabase();
+  if (!supabase) return SEED_PARTIES;
+  const { data, error } = await supabase
+    .from("parties")
+    .select("*")
+    .order("party_name");
+  if (error) throw new Error(`Couldn't load parties: ${error.message}`);
+  return (data ?? []).map(rowToParty);
 }
 
 export async function getPeople(): Promise<Person[]> {

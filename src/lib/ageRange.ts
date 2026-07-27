@@ -1,7 +1,7 @@
 // Group.ageRange is free text (e.g. "24–32", "18–24", or "All ages") rather
 // than two structured numbers — it reads better as a form field and the
 // original design already used strings like this. Parsed here just for
-// matching against a Person's age in the Finder.
+// matching against a Party's age in the Finder.
 
 /** Parses "24–32" (en dash) or "24-32" (hyphen) into [min, max]. Returns
  * null for "All ages" or anything else unparseable — callers should treat

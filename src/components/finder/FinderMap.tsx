@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { AdvancedMarker, ColorScheme, Map as GoogleMap, useMap } from "@vis.gl/react-google-maps";
-import { displayName, initialsOf, type Group, type Person } from "@/lib/types";
+import { initialsOf, partyDisplayName, type Group, type Party, type Person } from "@/lib/types";
 import { groupPinColor, statusSolid } from "@/lib/colors";
 import { UsersIcon } from "@/components/icons";
 import { useTheme } from "@/components/ThemeProvider";
@@ -33,7 +33,7 @@ function hasLocation(g: Group): g is LocatedGroup {
   return typeof g.lat === "number" && typeof g.lng === "number";
 }
 
-function personLocation(p: Person | null | undefined): LatLng | null {
+function partyLocation(p: Party | null | undefined): LatLng | null {
   if (!p || typeof p.lat !== "number" || typeof p.lng !== "number") return null;
   return { lat: p.lat, lng: p.lng };
 }
@@ -59,11 +59,11 @@ function groupPinLabel(name: string): string {
 
 // A pin to be rendered, tagged so jittered positions can be routed back to
 // the right visual (teardrop group pin, the one "Finding for" silhouette,
-// or a smaller status-colored person pin).
+// or a smaller status-colored party pin).
 type MapPin =
   | { kind: "group"; id: string; lat: number; lng: number; group: LocatedGroup }
-  | { kind: "person"; id: string; lat: number; lng: number; person: Person }
-  | { kind: "statusPerson"; id: string; lat: number; lng: number; person: Person };
+  | { kind: "party"; id: string; lat: number; lng: number; party: Party }
+  | { kind: "statusParty"; id: string; lat: number; lng: number; party: Party };
 
 /**
  * Nudges pins that would otherwise sit on (or very near) the exact same
@@ -111,8 +111,9 @@ function spreadOverlaps<T extends { id: string; lat: number; lng: number }>(
 // Maps JS instance instead of loading the script twice.
 export function FinderMap({
   groups,
-  person,
-  statusPeople,
+  party,
+  people,
+  statusParties,
   selectedId,
   onSelect,
   showAllPeople,
@@ -120,34 +121,48 @@ export function FinderMap({
   showPeopleAvailable,
 }: {
   groups: Group[];
-  /** The currently selected "Finding for" person, if any — shown as a
+  /** The currently selected "Finding for" party, if any — shown as a
    * distinct pin and included when fitting the map to visible points. */
-  person?: Person | null;
-  /** Everyone to render as a smaller, status-colored pin when
+  party?: Party | null;
+  /** Every person, used only to look up each rendered party's members (for
+   * pin initials/tooltips) — never rendered as its own pin. */
+  people: Person[];
+  /** Every party to render as a smaller, status-colored pin when
    * `showAllPeople` is on — already scoped by the caller to either "the
-   * selected group's roster" or "everyone", and already excludes `person`
-   * so the two pin types never overlap for the same person. */
-  statusPeople: Person[];
+   * selected group's roster" or "everyone", and already excludes `party`
+   * so the two pin types never overlap for the same party. */
+  statusParties: Party[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   showAllPeople: boolean;
   onToggleShowAllPeople: () => void;
-  /** Hide the toggle entirely when there's no one to show (e.g. no People
+  /** Hide the toggle entirely when there's no one to show (e.g. no Parties
    * data at all), same guard the "Finding for" search already uses. */
   showPeopleAvailable: boolean;
 }) {
   const { theme } = useTheme();
   const located = groups.filter(hasLocation);
   const missing = groups.length - located.length;
-  const personPoint = personLocation(person);
-  const locatedStatusPeople = useMemo(
-    () => statusPeople.filter((p): p is Person & { lat: number; lng: number } =>
+  const partyPoint = partyLocation(party);
+
+  const membersByParty = useMemo(() => {
+    const map = new Map<string, Person[]>();
+    for (const person of people) {
+      const list = map.get(person.partyId) ?? [];
+      list.push(person);
+      map.set(person.partyId, list);
+    }
+    return map;
+  }, [people]);
+
+  const locatedStatusParties = useMemo(
+    () => statusParties.filter((p): p is Party & { lat: number; lng: number } =>
       typeof p.lat === "number" && typeof p.lng === "number",
     ),
-    [statusPeople],
+    [statusParties],
   );
 
-  // Fit-to-bounds only ever considers groups + the "Finding for" person —
+  // Fit-to-bounds only ever considers groups + the "Finding for" party —
   // the status-colored roster pins render on the map but deliberately don't
   // affect auto-zoom, so toggling "Show people" never yanks the viewport.
   const fitPoints = useMemo(() => {
@@ -158,19 +173,19 @@ export function FinderMap({
       lng: g.lng,
       group: g,
     }));
-    if (person && personPoint) {
-      raw.push({ kind: "person", id: person.id, lat: personPoint.lat, lng: personPoint.lng, person });
+    if (party && partyPoint) {
+      raw.push({ kind: "party", id: party.id, lat: partyPoint.lat, lng: partyPoint.lng, party });
     }
     return raw;
-  }, [located, person, personPoint]);
+  }, [located, party, partyPoint]);
 
   const pins = useMemo(() => {
     const raw: MapPin[] = [...fitPoints];
-    for (const p of locatedStatusPeople) {
-      raw.push({ kind: "statusPerson", id: p.id, lat: p.lat, lng: p.lng, person: p });
+    for (const p of locatedStatusParties) {
+      raw.push({ kind: "statusParty", id: p.id, lat: p.lat, lng: p.lng, party: p });
     }
     return spreadOverlaps(raw);
-  }, [fitPoints, locatedStatusPeople]);
+  }, [fitPoints, locatedStatusParties]);
 
   if (!BROWSER_KEY) {
     return (
@@ -193,7 +208,7 @@ export function FinderMap({
         colorScheme={theme === "dark" ? ColorScheme.DARK : ColorScheme.LIGHT}
         className="h-full w-full"
       >
-        <FitToPoints points={fitPoints} active={!!person} />
+        <FitToPoints points={fitPoints} active={!!party} />
         {pins.map((pin) => {
           if (pin.kind === "group") {
             return (
@@ -206,20 +221,22 @@ export function FinderMap({
               />
             );
           }
-          if (pin.kind === "person") {
+          if (pin.kind === "party") {
             return (
-              <PersonPin
-                key={`person-${pin.id}`}
+              <PartyPin
+                key={`party-${pin.id}`}
                 position={{ lat: pin.lat, lng: pin.lng }}
-                person={pin.person}
+                party={pin.party}
+                members={membersByParty.get(pin.party.id) ?? []}
               />
             );
           }
           return (
-            <StatusPersonPin
+            <StatusPartyPin
               key={`status-${pin.id}`}
               position={{ lat: pin.lat, lng: pin.lng }}
-              person={pin.person}
+              party={pin.party}
+              members={membersByParty.get(pin.party.id) ?? []}
             />
           );
         })}
@@ -254,13 +271,13 @@ export function FinderMap({
 
 /** Default view is always the full DFW bounds — the user zooms/pans
  * manually from there while just browsing/filtering groups. The map only
- * auto-zooms to fit specific points while a "Finding for" person is
+ * auto-zooms to fit specific points while a "Finding for" party is
  * actively selected (`active`), since that's the one case where jumping to
  * a relevant area is actually helpful rather than disorienting. */
 function FitToPoints({ points, active }: { points: LatLng[]; active: boolean }) {
   const map = useMap();
 
-  // Re-applied only when `active` flips (person selected/cleared) — never
+  // Re-applied only when `active` flips (party selected/cleared) — never
   // just because filters change, so manual zoom/pan is preserved while
   // browsing.
   useEffect(() => {
@@ -340,16 +357,17 @@ function GroupPin({
   );
 }
 
-/** Distinct "you are here"-style pin for the person "Finding for" is set
- * to — a person silhouette (head + shoulders), colored by their own
+/** Distinct "you are here"-style pin for the party "Finding for" is set
+ * to — a person silhouette (head + shoulders), colored by the party's own
  * status (same as the roster pins below) rather than always blue, with
- * the person's initials in the head. Still reads as distinct from a
- * group teardrop or a roster pin via its larger size, pulsing halo, and
- * top z-index, not via a fixed color anymore. */
-function PersonPin({ position, person }: { position: LatLng; person: Person }) {
-  const color = statusSolid(person.status);
+ * the party's initials in the head. Still reads as distinct from a group
+ * teardrop or a roster pin via its larger size, pulsing halo, and top
+ * z-index, not via a fixed color anymore. */
+function PartyPin({ position, party, members }: { position: LatLng; party: Party; members: Person[] }) {
+  const color = statusSolid(party.status);
+  const label = partyDisplayName(party, members);
   return (
-    <AdvancedMarker position={position} zIndex={40} title={displayName(person)}>
+    <AdvancedMarker position={position} zIndex={40} title={label}>
       <div className="relative flex h-[52px] w-[46px] items-center justify-center">
         <span
           className="hw-pulse-ring"
@@ -376,7 +394,7 @@ function PersonPin({ position, person }: { position: LatLng; person: Person }) {
               fontWeight="800"
               fill="#fff"
             >
-              {initialsOf(displayName(person))}
+              {initialsOf(label)}
             </text>
           </svg>
         </div>
@@ -385,14 +403,15 @@ function PersonPin({ position, person }: { position: LatLng; person: Person }) {
   );
 }
 
-/** A person shown because "Show people" is on — same silhouette shape as
- * PersonPin but smaller, colored by their status instead of always blue,
- * and with lower z-index so it never competes with the "Finding for" pin
- * or a selected group pin. */
-function StatusPersonPin({ position, person }: { position: LatLng; person: Person }) {
-  const color = statusSolid(person.status);
+/** A party shown because "Show people" is on — same silhouette shape as
+ * PartyPin but smaller, colored by status instead of always blue, and with
+ * lower z-index so it never competes with the "Finding for" pin or a
+ * selected group pin. */
+function StatusPartyPin({ position, party, members }: { position: LatLng; party: Party; members: Person[] }) {
+  const color = statusSolid(party.status);
+  const label = partyDisplayName(party, members);
   return (
-    <AdvancedMarker position={position} zIndex={20} title={`${displayName(person)} · ${person.status}`}>
+    <AdvancedMarker position={position} zIndex={20} title={`${label} · ${party.status}`}>
       <div style={{ filter: "drop-shadow(0 2px 5px rgba(22,50,79,.32))" }}>
         <svg width="23" height="27" viewBox="0 0 32 38" fill="none">
           <path
@@ -411,7 +430,7 @@ function StatusPersonPin({ position, person }: { position: LatLng; person: Perso
             fontWeight="800"
             fill="#fff"
           >
-            {initialsOf(displayName(person))}
+            {initialsOf(label)}
           </text>
         </svg>
       </div>

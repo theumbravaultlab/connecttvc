@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { APIProvider } from "@vis.gl/react-google-maps";
-import type { Group, Person } from "@/lib/types";
+import type { Group, Party, Person } from "@/lib/types";
 import { initialsOf } from "@/lib/types";
 import { signOut } from "@/app/actions";
 import { Avatar } from "@/components/ui";
@@ -20,12 +20,14 @@ const tabStyle = (active: boolean) =>
 
 export function AppShell({
   groups,
+  parties,
   people,
   userEmail,
   persisted,
   children,
 }: {
   groups: Group[];
+  parties: Party[];
   people: Person[];
   userEmail: string | null;
   persisted: boolean;
@@ -38,12 +40,12 @@ export function AppShell({
   const { theme, toggleTheme } = useTheme();
 
   const groupsOpen = groups.filter((g) => g.status === "Open").length;
-  const peopleNeedingPlacement = people.filter(
+  const partiesNeedingPlacement = parties.filter(
     (p) => p.status === "New" || p.status === "Actively Searching" || p.status === "Waitlisted",
   ).length;
 
   return (
-    <DirectoryDataProvider groups={groups} people={people} persisted={persisted}>
+    <DirectoryDataProvider groups={groups} parties={parties} people={people} persisted={persisted}>
       <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--surface)] print:h-auto print:overflow-visible">
         {/* unified header — hidden when printing/exporting a PDF */}
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--divider)] px-4 py-2.5 sm:px-6 sm:py-3 print:hidden">
@@ -63,11 +65,11 @@ export function AppShell({
               <span className="text-[11px] font-bold text-[var(--muted)]">Open</span>
             </div>
             <div className="flex items-center gap-1.5 rounded-full bg-[var(--panel-4)] px-3 py-1.5">
-              <span className="text-[13px] font-extrabold text-[var(--ink)]">{people.length}</span>
-              <span className="text-[11px] font-bold text-[var(--muted)]">People</span>
+              <span className="text-[13px] font-extrabold text-[var(--ink)]">{parties.length}</span>
+              <span className="text-[11px] font-bold text-[var(--muted)]">Parties</span>
               <span className="text-[var(--border)]">·</span>
               <span className="text-[13px] font-extrabold text-[oklch(0.55_0.14_70)]">
-                {peopleNeedingPlacement}
+                {partiesNeedingPlacement}
               </span>
               <span className="text-[11px] font-bold text-[var(--muted)]">Needing placement</span>
             </div>

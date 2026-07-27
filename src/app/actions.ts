@@ -5,7 +5,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getViewerEmail } from "@/lib/auth";
 import { geocodeAddress, type GeoResult } from "@/lib/geocode";
 import { getTravelTimes, type TravelTime } from "@/lib/routes";
-import type { ContactLogEntry, Group, Person } from "@/lib/types";
+import type { ContactLogEntry, Group, Party, Person } from "@/lib/types";
 
 type SupabaseClient = NonNullable<Awaited<ReturnType<typeof getServerSupabase>>>;
 
@@ -43,12 +43,10 @@ function groupToRow(g: Group, geo?: GeoResult | null) {
   };
 }
 
-function personToRow(p: Person, geo?: GeoResult | null) {
+function partyToRow(p: Party, geo?: GeoResult | null) {
   return {
     id: p.id,
-    name: p.name,
-    email: p.email,
-    phone: p.phone,
+    party_name: p.partyName,
     // No address means no city — only fall back to the existing area when
     // an address is present but this particular geocode attempt failed.
     area: p.address.trim() ? (geo?.city ?? p.area) : "",
@@ -64,11 +62,18 @@ function personToRow(p: Person, geo?: GeoResult | null) {
     group_id: p.group,
     joined: p.joined,
     notes: p.notes,
-    party_size: p.partySize,
-    partner_name: p.partnerName,
-    party_name: p.partyName,
     lat: geo ? geo.lat : (p.lat ?? null),
     lng: geo ? geo.lng : (p.lng ?? null),
+  };
+}
+
+function personToRow(p: Person) {
+  return {
+    id: p.id,
+    party_id: p.partyId,
+    name: p.name,
+    email: p.email,
+    phone: p.phone,
   };
 }
 
@@ -77,7 +82,7 @@ type ActionResult = {
   error?: string;
   persisted: boolean;
   updatedAt?: string;
-  // Populated by saveGroup/savePerson on success — the geocoded (or
+  // Populated by saveGroup/saveParty on success — the geocoded (or
   // carried-forward) area/lat/lng actually written to the row, so the
   // caller can patch its own in-memory copy immediately instead of only
   // finding out on the next full page load.
@@ -88,7 +93,7 @@ type ActionResult = {
 
 // Named for what it actually checks: is there a valid signed-in session.
 // The real leader/admin role gate is RLS (`is_leader()` in schema.sql), on
-// every policy for groups/people/join_requests — this is just the "reject
+// every policy for groups/parties/people — this is just the "reject
 // direct POSTs from a signed-out client" layer server actions need on top
 // of that, since actions are reachable regardless of what the UI shows.
 async function requireAuth() {
@@ -101,13 +106,13 @@ async function requireAuth() {
   return { supabase } as const;
 }
 
-type ExistingRow = { address: string; lat: number | null; lng: number | null; updated_at: string } | null;
+type ExistingGeoRow = { address: string; lat: number | null; lng: number | null; updated_at: string } | null;
 
-async function loadExisting(
+async function loadExistingGeo(
   supabase: SupabaseClient,
-  table: "groups" | "people",
+  table: "groups" | "parties",
   id: string,
-): Promise<ExistingRow> {
+): Promise<ExistingGeoRow> {
   const { data } = await supabase
     .from(table)
     .select("address, lat, lng, updated_at")
@@ -119,9 +124,12 @@ async function loadExisting(
 /** Null when there's no baseline to compare (a brand-new record, or the
  * client hasn't loaded one yet) or when it still matches. Otherwise, the
  * row was saved by someone else since this session last loaded it. */
-function staleConflictError(existing: ExistingRow, clientUpdatedAt: string | undefined): string | null {
-  if (!existing || !clientUpdatedAt) return null;
-  if (existing.updated_at !== clientUpdatedAt) {
+function staleConflictError(
+  existingUpdatedAt: string | null | undefined,
+  clientUpdatedAt: string | undefined,
+): string | null {
+  if (!existingUpdatedAt || !clientUpdatedAt) return null;
+  if (existingUpdatedAt !== clientUpdatedAt) {
     return "Someone else saved changes to this record after you loaded it — reload the page to see the latest version before saving again.";
   }
   return null;
@@ -131,8 +139,8 @@ export async function saveGroup(group: Group): Promise<ActionResult> {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true, persisted: false };
 
-  const existing = await loadExisting(supabase, "groups", group.id);
-  const conflict = staleConflictError(existing, group.updatedAt);
+  const existing = await loadExistingGeo(supabase, "groups", group.id);
+  const conflict = staleConflictError(existing?.updated_at, group.updatedAt);
   if (conflict) return { ok: false, error: conflict, persisted: true };
 
   // Re-geocoding on every save regardless of whether the address actually
@@ -164,23 +172,23 @@ export async function saveGroup(group: Group): Promise<ActionResult> {
   };
 }
 
-export async function savePerson(person: Person): Promise<ActionResult> {
+export async function saveParty(party: Party): Promise<ActionResult> {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true, persisted: false };
 
-  const existing = await loadExisting(supabase, "people", person.id);
-  const conflict = staleConflictError(existing, person.updatedAt);
+  const existing = await loadExistingGeo(supabase, "parties", party.id);
+  const conflict = staleConflictError(existing?.updated_at, party.updatedAt);
   if (conflict) return { ok: false, error: conflict, persisted: true };
 
-  const addressChanged = !existing || existing.address !== person.address;
+  const addressChanged = !existing || existing.address !== party.address;
   const geo =
-    person.address.trim() && (addressChanged || existing?.lat == null)
-      ? await geocodeAddress(person.address)
+    party.address.trim() && (addressChanged || existing?.lat == null)
+      ? await geocodeAddress(party.address)
       : null;
 
-  const row = personToRow(person, geo);
+  const row = partyToRow(party, geo);
   const { data, error } = await supabase
-    .from("people")
+    .from("parties")
     .upsert(row)
     .select("updated_at")
     .single();
@@ -195,6 +203,29 @@ export async function savePerson(person: Person): Promise<ActionResult> {
   };
 }
 
+/** Person has no address/geo of its own (that lives on its Party) — just a
+ * conflict check on `updated_at` plus an upsert of name/email/phone/party_id. */
+export async function savePerson(person: Person): Promise<ActionResult> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false };
+
+  const { data: existing } = await supabase
+    .from("people")
+    .select("updated_at")
+    .eq("id", person.id)
+    .maybeSingle();
+  const conflict = staleConflictError(existing?.updated_at, person.updatedAt);
+  if (conflict) return { ok: false, error: conflict, persisted: true };
+
+  const { data, error } = await supabase
+    .from("people")
+    .upsert(personToRow(person))
+    .select("updated_at")
+    .single();
+  if (error) return { ok: false, error: error.message, persisted: true };
+  return { ok: true, persisted: true, updatedAt: data?.updated_at };
+}
+
 type GeoUpdate = { id: string; lat: number; lng: number; area?: string };
 
 /**
@@ -206,7 +237,7 @@ type GeoUpdate = { id: string; lat: number; lng: number; area?: string };
  */
 async function backfillLocations(
   supabase: SupabaseClient,
-  table: "groups" | "people",
+  table: "groups" | "parties",
 ): Promise<{ ok: boolean; error?: string; updated: GeoUpdate[] }> {
   const { data, error: fetchError } = await supabase
     .from(table)
@@ -253,19 +284,19 @@ export async function backfillGroupLocations(): Promise<
   return { ok: result.ok, error: result.error, persisted: true, updated: result.updated };
 }
 
-/** Same idea as backfillGroupLocations, for people with an address but no
+/** Same idea as backfillGroupLocations, for parties with an address but no
  * coordinates yet (e.g. bulk-inserted sample data, or rows saved before this
- * feature). Called automatically (see PeopleListPage.tsx). */
-export async function backfillPersonLocations(): Promise<
+ * feature). Called automatically (see PartiesListPage.tsx). */
+export async function backfillPartyLocations(): Promise<
   ActionResult & { updated: GeoUpdate[] }
 > {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true, persisted: false, updated: [] };
-  const result = await backfillLocations(supabase, "people");
+  const result = await backfillLocations(supabase, "parties");
   return { ok: result.ok, error: result.error, persisted: true, updated: result.updated };
 }
 
-/** Drive time from a person's location to each of the given groups, in one
+/** Drive time from a party's location to each of the given groups, in one
  * batched Routes API call. Read-only, but still auth-gated — server actions
  * are reachable via direct POST regardless of the UI, so this shouldn't
  * skip the same check every other action here makes. */
@@ -285,6 +316,17 @@ export async function deleteGroup(id: string): Promise<ActionResult> {
   return { ok: true, persisted: true };
 }
 
+/** Deletes the party and, via `on delete cascade`, every linked Person row
+ * and contact_log entry with it — a party's members and outreach history
+ * don't make sense to keep around once the party itself is gone. */
+export async function deleteParty(id: string): Promise<ActionResult> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false };
+  const { error } = await supabase.from("parties").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message, persisted: true };
+  return { ok: true, persisted: true };
+}
+
 export async function deletePerson(id: string): Promise<ActionResult> {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true, persisted: false };
@@ -295,28 +337,28 @@ export async function deletePerson(id: string): Promise<ActionResult> {
 
 function rowToContactLogEntry(r: {
   id: string;
-  person_id: string;
+  party_id: string;
   contacted_by: string | null;
   note: string | null;
   created_at: string;
 }): ContactLogEntry {
   return {
     id: r.id,
-    personId: r.person_id,
+    partyId: r.party_id,
     contactedBy: r.contacted_by,
     note: r.note ?? "",
     createdAt: r.created_at,
   };
 }
 
-/** Most-recent-first outreach history for one person. */
-export async function getContactLog(personId: string): Promise<ContactLogEntry[]> {
+/** Most-recent-first outreach history for one party. */
+export async function getContactLog(partyId: string): Promise<ContactLogEntry[]> {
   const { supabase } = await requireAuth();
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("contact_log")
-    .select("id, person_id, contacted_by, note, created_at")
-    .eq("person_id", personId)
+    .select("id, party_id, contacted_by, note, created_at")
+    .eq("party_id", partyId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(`Couldn't load the contact log: ${error.message}`);
   return (data ?? []).map(rowToContactLogEntry);
@@ -324,9 +366,10 @@ export async function getContactLog(personId: string): Promise<ContactLogEntry[]
 
 /** Appends a new outreach entry, auto-attributed to the signed-in
  * coordinator — never manually typed, so the log stays trustworthy for
- * "has anyone already reached out to this person" decisions. */
+ * "has anyone already reached out to this party" decisions, regardless of
+ * which member you actually contacted. */
 export async function addContactLogEntry(
-  personId: string,
+  partyId: string,
   note: string,
 ): Promise<{ ok: boolean; error?: string; entry?: ContactLogEntry }> {
   const { supabase } = await requireAuth();
@@ -334,8 +377,8 @@ export async function addContactLogEntry(
   const contactedBy = await getViewerEmail();
   const { data, error } = await supabase
     .from("contact_log")
-    .insert({ person_id: personId, contacted_by: contactedBy, note })
-    .select("id, person_id, contacted_by, note, created_at")
+    .insert({ party_id: partyId, contacted_by: contactedBy, note })
+    .select("id, party_id, contacted_by, note, created_at")
     .single();
   if (error) return { ok: false, error: error.message };
   return { ok: true, entry: rowToContactLogEntry(data) };

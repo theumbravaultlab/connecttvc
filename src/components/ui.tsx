@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { capacityFill, lifeColors, spotsBadge, statusColors } from "@/lib/colors";
-import type { DayShort, GroupStatus, LifeStage, PersonStatus } from "@/lib/types";
+import type { DayShort, GroupStatus, LifeStage, PartyStatus } from "@/lib/types";
 import { DAYS } from "@/lib/types";
 
 export function LifeTag({ life }: { life: LifeStage }) {
@@ -15,9 +15,9 @@ export function LifeTag({ life }: { life: LifeStage }) {
   );
 }
 
-/** Shown next to a person's name wherever their summary appears, whenever
- * they're searching as a party of 2+ — a quick visual cue that placing them
- * takes multiple open spots, not one. */
+/** Shown next to a party's name wherever its summary appears, whenever it
+ * has 2+ members — a quick visual cue that placing them takes multiple
+ * open spots, not one. */
 export function PartyTag({ partySize }: { partySize: number }) {
   if (partySize <= 1) return null;
   return (
@@ -30,7 +30,7 @@ export function PartyTag({ partySize }: { partySize: number }) {
   );
 }
 
-export function StatusPill({ status }: { status: GroupStatus | PersonStatus }) {
+export function StatusPill({ status }: { status: GroupStatus | PartyStatus }) {
   const c = statusColors(status);
   return (
     <span

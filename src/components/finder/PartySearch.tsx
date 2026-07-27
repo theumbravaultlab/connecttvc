@@ -2,40 +2,46 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  PERSON_STATUSES,
-  displayName,
+  PARTY_STATUSES,
   initialsOf,
+  partyDisplayName,
+  partyMemberNames,
+  type Party,
+  type PartyStatus,
   type Person,
-  type PersonStatus,
 } from "@/lib/types";
 import { Avatar, PartyTag, StatusPill } from "@/components/ui";
 import { SearchIcon, XIcon } from "@/components/icons";
 
 /**
- * Typeahead replacement for the old plain <select> — with 100+ people, a
- * flat alphabetical dropdown stopped being usable. Shows each match's
- * status pill right next to their name, both while searching and once
- * selected. Opens on focus/click even with no query typed yet, so a
- * coordinator can browse everyone rather than needing a name in mind, and
- * offers a status filter to narrow that browse list.
+ * Typeahead lookup for "Finding for" — matches a party by its own name
+ * ("The Griers") *or* by any member's name ("Will Grier"), landing on the
+ * party either way. Shows each match's status pill and, when it has more
+ * than one member, a "Will Grier & Sarah Grier" subline so it's obvious
+ * who's actually in the party you just found. Opens on focus/click even
+ * with no query typed yet, so a coordinator can browse everyone rather
+ * than needing a name in mind, and offers a status filter to narrow that
+ * browse list.
  */
-export function PersonSearch({
+export function PartySearch({
   id,
+  parties,
   people,
   selected,
   onSelect,
   onClear,
 }: {
   id?: string;
+  parties: Party[];
   people: Person[];
-  selected: Person | null;
+  selected: Party | null;
   onSelect: (id: string) => void;
   onClear: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);
-  const [statusFilter, setStatusFilter] = useState<PersonStatus | "All">("All");
+  const [statusFilter, setStatusFilter] = useState<PartyStatus | "All">("All");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -49,23 +55,33 @@ export function PersonSearch({
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, []);
 
+  const membersByParty = useMemo(() => {
+    const map = new Map<string, Person[]>();
+    for (const person of people) {
+      const list = map.get(person.partyId) ?? [];
+      list.push(person);
+      map.set(person.partyId, list);
+    }
+    return map;
+  }, [people]);
+
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return people
+    return parties
       .filter((p) => statusFilter === "All" || p.status === statusFilter)
+      .map((p) => ({ party: p, members: membersByParty.get(p.id) ?? [] }))
       .filter(
-        (p) =>
+        ({ party, members }) =>
           !q ||
-          displayName(p).toLowerCase().includes(q) ||
-          p.name.toLowerCase().includes(q) ||
-          p.partnerName.toLowerCase().includes(q),
+          partyDisplayName(party, members).toLowerCase().includes(q) ||
+          members.some((m) => m.name.toLowerCase().includes(q)),
       )
-      .sort((a, b) => displayName(a).localeCompare(displayName(b)))
+      .sort((a, b) => partyDisplayName(a.party, a.members).localeCompare(partyDisplayName(b.party, b.members)))
       .slice(0, 50);
-  }, [people, query, statusFilter]);
+  }, [parties, membersByParty, query, statusFilter]);
 
-  const handleSelect = (p: Person) => {
-    onSelect(p.id);
+  const handleSelect = (party: Party) => {
+    onSelect(party.id);
     setQuery("");
     setOpen(false);
     setHighlighted(-1);
@@ -81,20 +97,21 @@ export function PersonSearch({
       setHighlighted((h) => Math.max(h - 1, 0));
     } else if (e.key === "Enter" && highlighted >= 0) {
       e.preventDefault();
-      handleSelect(matches[highlighted]);
+      handleSelect(matches[highlighted].party);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
   };
 
   if (selected) {
+    const selectedMembers = membersByParty.get(selected.id) ?? [];
     return (
       <div className="flex items-center justify-between gap-2 rounded-[9px] border-[1.5px] border-[var(--brand-blue-light)] bg-[var(--surface)] py-1.5 pl-3 pr-1.5">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-[13px] font-bold text-[var(--brand-blue)]">
-            {displayName(selected)}
+            {partyDisplayName(selected, selectedMembers)}
           </span>
-          <PartyTag partySize={selected.partySize} />
+          <PartyTag partySize={selectedMembers.length} />
           <StatusPill status={selected.status} />
         </span>
         <button
@@ -115,7 +132,7 @@ export function PersonSearch({
           setOpen(true);
           inputRef.current?.focus();
         }}
-        aria-label="Browse all people"
+        aria-label="Browse all parties"
         className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--faint)]"
       >
         <SearchIcon width={14} height={14} />
@@ -131,7 +148,7 @@ export function PersonSearch({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
-        placeholder="Search for a person…"
+        placeholder="Search for a party or person…"
         autoComplete="off"
         className="w-full rounded-[9px] border-[1.5px] border-[var(--brand-blue-light)] bg-[var(--surface)] py-2 pl-8 pr-3 text-[13px] font-bold text-[var(--brand-blue)] outline-none placeholder:text-[var(--faint)] placeholder:font-semibold"
       />
@@ -143,32 +160,39 @@ export function PersonSearch({
             </label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as PersonStatus | "All")}
+              onChange={(e) => setStatusFilter(e.target.value as PartyStatus | "All")}
               className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-1.5 py-1 text-[11px] font-semibold text-[var(--ink)] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
             >
               <option value="All">All statuses</option>
-              {PERSON_STATUSES.map((s) => (
+              {PARTY_STATUSES.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
           </div>
           {matches.length > 0 ? (
             <ul className="max-h-64 overflow-y-auto py-1">
-              {matches.map((p, i) => (
-                <li key={p.id}>
+              {matches.map(({ party, members }, i) => (
+                <li key={party.id}>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleSelect(p)}
+                    onClick={() => handleSelect(party)}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left"
                     style={{ background: i === highlighted ? "var(--panel-2)" : "var(--surface)" }}
                   >
-                    <Avatar initials={initialsOf(displayName(p))} size={22} tone="muted" />
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--ink)]">
-                      {displayName(p)}
+                    <Avatar initials={initialsOf(partyDisplayName(party, members))} size={22} tone="muted" />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-[13px] font-semibold text-[var(--ink)]">
+                        {partyDisplayName(party, members)}
+                      </span>
+                      {members.length > 1 && (
+                        <span className="truncate text-[11px] font-semibold text-[var(--faint)]">
+                          {partyMemberNames(members)}
+                        </span>
+                      )}
                     </span>
-                    <PartyTag partySize={p.partySize} />
-                    <StatusPill status={p.status} />
+                    <PartyTag partySize={members.length} />
+                    <StatusPill status={party.status} />
                   </button>
                 </li>
               ))}
@@ -177,7 +201,7 @@ export function PersonSearch({
             <div className="px-3 py-2 text-[12px] font-semibold text-[var(--faint)]">
               {query.trim()
                 ? `No one matches "${query.trim()}".`
-                : "No people match this status."}
+                : "No parties match this status."}
             </div>
           )}
         </div>

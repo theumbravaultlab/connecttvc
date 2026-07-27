@@ -4,7 +4,7 @@ import { TrashIcon } from "@/components/icons";
 
 export type SaveState = "idle" | "saved" | "error";
 
-/** The sticky delete/save action bar shared by the Group and Person edit
+/** The sticky delete/save action bar shared by the Group and Party edit
  * pages — identical everywhere except which entity it's saving. */
 export function SaveBar({
   onDelete,
