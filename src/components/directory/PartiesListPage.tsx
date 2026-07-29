@@ -44,6 +44,10 @@ function compareParties(
       const bn = b.assignedTo ? (profileNames.get(b.assignedTo) ?? "") : "";
       return an.localeCompare(bn);
     }
+    case "createdAt":
+      // ISO 8601 strings sort lexicographically in chronological order;
+      // a not-yet-saved record has no createdAt yet, sorts first.
+      return (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
     default:
       return 0;
   }

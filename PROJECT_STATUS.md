@@ -1,6 +1,6 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-07-27 · commit `fa0be3c` (pending: the 017 v2 sample data generator, the 018 five-city expansion batch, and the coordinator identity/assignment/sort-filter/audit-trail batch — none committed yet)
+Last updated: 2026-07-27 · commit `9fd7cdb` (pending: "Created On" column + confirmed default Name A→Z sort on both Directory lists — not yet committed)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -1870,6 +1870,34 @@ update policy actually lets a save through, confirming the "Assigned to"
 picker/column/filter round-trips correctly, confirming Day sorts Mon→Sun
 and not alphabetically, and confirming a Group-initiated party assignment
 shows up correctly on that party's own Placement History.
+
+**Follow-up, same round: timestamps are now pinned to Central time.** Every
+date/time display in the app (outreach log, placement history, the new
+record-info footer, the Reports PDF export header) called `toLocaleString`/
+`toLocaleDateString` with no `timeZone` option, so each rendered in
+whichever timezone the *viewer's own device* happened to be set to — a
+coordinator in a different timezone than their teammates would see a
+different "when" for the exact same event. New `src/lib/format.ts`
+consolidates all 4 call sites into `formatDateTime()`/`formatDate()`/
+`formatExportedAt()`, each hardcoded to `America/Chicago` (DST-aware, so
+CDT in summer and CST in winter automatically) — this org only ever
+operates in DFW, so every timestamp should read the same regardless of who
+or where the viewer is. Every formatted date/time now also ends in " CT"
+so it's visually unambiguous which zone is shown. Verified directly (not
+just by reading the code): a known UTC timestamp in July resolved 5 hours
+back (CDT) and the same clock time in January resolved 6 hours back (CST).
+
+**Follow-up, same round: "Created On" added to both Directory lists, and
+default sort confirmed as Name A→Z.** `GroupTable`/`PartyTable`
+(`tables.tsx`) gained a `createdAt` sortable column (using the new
+`formatDate()` from `src/lib/format.ts`), plus each list page's sort
+comparator gained a matching `createdAt` case — ISO 8601 strings sort
+correctly as plain strings, so no date parsing needed. A record that's
+never been saved has no `createdAt` yet and sorts first, shown as "—" in
+the column. Confirmed both list pages' default sort state was already
+`sortField: "name"`, `sortDir: "asc"` from when sorting was first built —
+no change needed there, just confirmed as the explicit, intentional
+default per this request.
 
 ## What's built and verified working
 

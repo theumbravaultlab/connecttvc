@@ -6,6 +6,7 @@ import type { Group, Party, Person } from "@/lib/types";
 import { initialsOf, partyDisplayName, partyMemberNames } from "@/lib/types";
 import { Avatar, LifeTag, PartyTag, StatusPill } from "@/components/ui";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
+import { formatDate } from "@/lib/format";
 
 export function EmptyState({ label, hasFilters }: { label: "groups" | "parties"; hasFilters: boolean }) {
   return (
@@ -59,7 +60,7 @@ function SortableHeader<F extends string>({
   );
 }
 
-export type GroupSortField = "name" | "day" | "area" | "life" | "status" | "spots" | "assignedTo";
+export type GroupSortField = "name" | "day" | "area" | "life" | "status" | "spots" | "assignedTo" | "createdAt";
 
 export function GroupTable({
   groups,
@@ -80,7 +81,7 @@ export function GroupTable({
   onSelect: (id: string) => void;
 }) {
   return (
-    <table className="w-full min-w-[760px] border-collapse">
+    <table className="w-full min-w-[860px] border-collapse">
       <thead className="sticky top-0 z-10 bg-[var(--surface)]">
         <tr className="border-b border-[var(--divider)]">
           <SortableHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
@@ -90,6 +91,7 @@ export function GroupTable({
           <SortableHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <SortableHeader field="spots" label="Spots Available" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <SortableHeader field="assignedTo" label="Assigned To" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="createdAt" label="Created On" sortField={sortField} sortDir={sortDir} onSort={onSort} />
         </tr>
       </thead>
       <tbody>
@@ -116,6 +118,7 @@ export function GroupTable({
                 {spots} of {g.capacity}
               </td>
               <td className={td}>{g.assignedTo ? (profileNames.get(g.assignedTo) ?? "—") : "—"}</td>
+              <td className={td}>{g.createdAt ? formatDate(g.createdAt) : "—"}</td>
             </tr>
           );
         })}
@@ -124,7 +127,7 @@ export function GroupTable({
   );
 }
 
-export type PartySortField = "name" | "area" | "life" | "status" | "assignedTo";
+export type PartySortField = "name" | "area" | "life" | "status" | "assignedTo" | "createdAt";
 
 export function PartyTable({
   parties,
@@ -146,7 +149,7 @@ export function PartyTable({
   const router = useRouter();
 
   return (
-    <table className="w-full min-w-[700px] border-collapse">
+    <table className="w-full min-w-[800px] border-collapse">
       <thead className="sticky top-0 z-10 bg-[var(--surface)]">
         <tr className="border-b border-[var(--divider)]">
           <SortableHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
@@ -154,6 +157,7 @@ export function PartyTable({
           <SortableHeader field="life" label="Life Stage" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <SortableHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <SortableHeader field="assignedTo" label="Assigned To" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="createdAt" label="Created On" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <th className={th}></th>
         </tr>
       </thead>
@@ -192,6 +196,7 @@ export function PartyTable({
                   <StatusPill status={pt.status} />
                 </td>
                 <td className={td}>{pt.assignedTo ? (profileNames.get(pt.assignedTo) ?? "—") : "—"}</td>
+                <td className={td}>{pt.createdAt ? formatDate(pt.createdAt) : "—"}</td>
                 <td className={`${td} text-right`}>
                   <button
                     type="button"
@@ -219,7 +224,7 @@ export function PartyTable({
                         <span className="text-[12.5px] font-semibold">{m.name}</span>
                       </span>
                     </td>
-                    <td colSpan={5} className={`${td} text-[12px] font-medium text-[var(--faint)]`}>
+                    <td colSpan={6} className={`${td} text-[12px] font-medium text-[var(--faint)]`}>
                       {[m.email, m.phone].filter(Boolean).join(" · ") || "No contact info on file"}
                     </td>
                   </tr>
