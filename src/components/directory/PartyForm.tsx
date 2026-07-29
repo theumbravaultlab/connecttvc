@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   LIFE_STAGES,
   PARTY_STATUSES,
@@ -12,6 +11,7 @@ import {
   type Group,
   type Party,
   type Person,
+  type Profile,
 } from "@/lib/types";
 import {
   Avatar,
@@ -22,17 +22,20 @@ import {
   TextInput,
   Toggle,
 } from "@/components/ui";
-import { ChevronDownIcon, EditIcon, PlusIcon } from "@/components/icons";
+import { PlusIcon } from "@/components/icons";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { AddressAutocomplete } from "./AddressAutocomplete";
 import { SectionHeading, Field } from "./form-bits";
 import { ContactLog } from "./ContactLog";
 import { PlacementHistory } from "./PlacementHistory";
+import { EntityPicker } from "./EntityPicker";
+import { AdminFooter } from "./AdminFooter";
 
 export function PartyForm({
   party,
   members,
   groups,
+  profiles,
   onPatch,
   onAddMember,
   onUpdateMember,
@@ -41,6 +44,7 @@ export function PartyForm({
   party: Party;
   members: Person[];
   groups: Group[];
+  profiles: Profile[];
   onPatch: (patch: Partial<Party>) => void;
   onAddMember: () => void;
   onUpdateMember: (id: string, patch: Partial<Person>) => void;
@@ -227,9 +231,15 @@ export function PartyForm({
           />
         </Field>
         <Field full label="Assigned group">
-          <AssignedGroupPicker
-            groups={groups}
+          <EntityPicker
+            items={groups}
             selectedId={party.group}
+            getId={(g) => g.id}
+            getLabel={(g) => g.name}
+            getSubLabel={(g) => g.area || "Group"}
+            searchPlaceholder="Search groups…"
+            noMatchLabel="No groups match."
+            viewHref={(g) => `/directory/groups/${g.id}`}
             onSelect={(group) =>
               // Assigning a group auto-sets status to Grouped; clearing it
               // back to Unassigned auto-reverts to Actively Searching —
@@ -237,6 +247,17 @@ export function PartyForm({
               // via the Status field above.
               onPatch({ group, status: group ? "Grouped" : "Actively Searching" })
             }
+          />
+        </Field>
+        <Field full label="Assigned to" tag="Point-person for this party — organizational only">
+          <EntityPicker
+            items={profiles}
+            selectedId={party.assignedTo}
+            getId={(p) => p.id}
+            getLabel={(p) => p.fullName}
+            searchPlaceholder="Search coordinators…"
+            noMatchLabel="No coordinators match."
+            onSelect={(assignedTo) => onPatch({ assignedTo })}
           />
         </Field>
         <Field full label="Leader notes">
@@ -253,6 +274,14 @@ export function PartyForm({
       <SectionHeading>Outreach</SectionHeading>
       <ContactLog partyId={party.id} />
 
+      <SectionHeading>Record info</SectionHeading>
+      <AdminFooter
+        createdAt={party.createdAt}
+        createdBy={party.createdBy}
+        updatedAt={party.updatedAt}
+        updatedBy={party.updatedBy}
+      />
+
       <ConfirmDialog
         open={removeCandidate != null}
         title={`Remove ${removeCandidate?.name.trim() || "this member"}?`}
@@ -268,132 +297,3 @@ export function PartyForm({
   );
 }
 
-/** Searchable dropdown lookup for Assigned Group (same idiom as the
- * City/Group search on the Map), plus a "View" link straight to that
- * group's own edit page once one is set. */
-function AssignedGroupPicker({
-  groups,
-  selectedId,
-  onSelect,
-}: {
-  groups: Group[];
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
-}) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  const close = () => {
-    setOpen(false);
-    setQuery("");
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const selected = groups.find((g) => g.id === selectedId) ?? null;
-  const q = query.trim().toLowerCase();
-  const filtered = (q ? groups.filter((g) => g.name.toLowerCase().includes(q)) : groups).slice(0, 50);
-
-  return (
-    <div className="flex items-center gap-2">
-      <div ref={rootRef} className="relative flex-1">
-        <button
-          type="button"
-          onClick={() => (open ? close() : setOpen(true))}
-          aria-expanded={open}
-          className="flex w-full items-center justify-between gap-1.5 rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] px-3 py-2 text-[13px] font-semibold text-[var(--ink)] outline-none transition-colors focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
-        >
-          <span className={selected ? "truncate" : "truncate text-[var(--faint)]"}>
-            {selected ? selected.name : "— Unassigned —"}
-          </span>
-          <ChevronDownIcon
-            width={14}
-            height={14}
-            className="shrink-0 text-[var(--faint)] transition-transform"
-            style={{ transform: open ? "rotate(180deg)" : undefined }}
-          />
-        </button>
-        {open && (
-          <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-[9px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_8px_20px_rgba(22,50,79,.14)]">
-            <div className="border-b border-[var(--divider)] p-2">
-              <input
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search groups…"
-                className="w-full rounded-md border border-[var(--border)] bg-[var(--panel-1)] px-2 py-1.5 text-[12px] font-semibold text-[var(--ink)] outline-none focus:border-[var(--brand-blue)]"
-              />
-            </div>
-            <ul className="max-h-64 overflow-y-auto py-1">
-              <li>
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    onSelect(null);
-                    close();
-                  }}
-                  className="flex w-full items-center px-3 py-2 text-left text-[12.5px] font-semibold text-[var(--faint)] hover:bg-[var(--panel-2)]"
-                >
-                  — Unassigned —
-                </button>
-              </li>
-              {filtered.map((g) => (
-                <li key={g.id}>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      onSelect(g.id);
-                      close();
-                    }}
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[var(--panel-2)]"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[var(--ink)]">
-                      {g.name}
-                    </span>
-                    <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
-                      {g.area || "Group"}
-                    </span>
-                  </button>
-                </li>
-              ))}
-              {filtered.length === 0 && (
-                <li className="px-3 py-2 text-[12px] font-semibold text-[var(--faint)]">
-                  No groups match.
-                </li>
-              )}
-            </ul>
-          </div>
-        )}
-      </div>
-      {selected && (
-        <button
-          type="button"
-          onClick={() => router.push(`/directory/groups/${selected.id}`)}
-          aria-label="View assigned group"
-          className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--brand-blue-light)] px-3 py-2 text-[12px] font-bold text-[var(--brand-blue)] transition-colors hover:bg-[var(--panel-2)]"
-        >
-          <EditIcon width={13} height={13} />
-          View
-        </button>
-      )}
-    </div>
-  );
-}

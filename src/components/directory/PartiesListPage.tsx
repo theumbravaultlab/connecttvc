@@ -7,29 +7,68 @@ import { backfillPartyLocations } from "@/app/actions";
 import { PlusIcon } from "@/components/icons";
 import { useDirectoryData } from "./DirectoryData";
 import { DirectoryNav } from "./DirectoryNav";
-import { ListFilterBar } from "./ListFilterBar";
-import { EmptyState, PartyTable } from "./tables";
+import { ListFilterBar, type ExtraFilter } from "./ListFilterBar";
+import { EmptyState, PartyTable, type PartySortField, type SortDir } from "./tables";
 
 const blankParty = (id: string): Party => ({
   id, partyName: "", area: "", address: "",
   age: null, days: [], timePref: "Flexible", life: "Everyone", interests: "",
   childcareNeeded: false, accessibility: "—", status: "New", group: null,
-  joined: "", notes: "",
+  joined: "", notes: "", assignedTo: null,
 });
 
 const blankMember = (partyId: string): Person => ({
   id: `new-${Date.now()}`, partyId, name: "New member", email: "", phone: "",
 });
 
+function compareParties(
+  a: Party,
+  b: Party,
+  field: PartySortField,
+  membersByParty: Map<string, Person[]>,
+  profileNames: Map<string, string>,
+): number {
+  switch (field) {
+    case "name":
+      return partyDisplayName(a, membersByParty.get(a.id) ?? []).localeCompare(
+        partyDisplayName(b, membersByParty.get(b.id) ?? []),
+      );
+    case "area":
+      return a.area.localeCompare(b.area);
+    case "life":
+      return a.life.localeCompare(b.life);
+    case "status":
+      return PARTY_STATUSES.indexOf(a.status) - PARTY_STATUSES.indexOf(b.status);
+    case "assignedTo": {
+      const an = a.assignedTo ? (profileNames.get(a.assignedTo) ?? "") : "";
+      const bn = b.assignedTo ? (profileNames.get(b.assignedTo) ?? "") : "";
+      return an.localeCompare(bn);
+    }
+    default:
+      return 0;
+  }
+}
+
 export function PartiesListPage() {
   const router = useRouter();
-  const { parties, setParties, people, setPeople } = useDirectoryData();
+  const { parties, setParties, people, setPeople, profiles } = useDirectoryData();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<PartyStatus | "All">("All");
   const [lifeFilter, setLifeFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
+  const [assignedToFilter, setAssignedToFilter] = useState("All");
+  const [sortField, setSortField] = useState<PartySortField>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+
+  const onSort = (field: PartySortField) => {
+    if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const missingLocations = parties.filter(
     (p) => p.address.trim() && (p.lat == null || p.lng == null),
@@ -88,12 +127,36 @@ export function PartiesListPage() {
     return map;
   }, [people]);
 
+  const profileNames = useMemo(() => new Map(profiles.map((p) => [p.id, p.fullName])), [profiles]);
+
+  const extraFilters: ExtraFilter[] = useMemo(
+    () => [
+      {
+        key: "assignedTo",
+        label: "Assigned to",
+        value: assignedToFilter,
+        onChange: setAssignedToFilter,
+        allLabel: "All coordinators",
+        options: [
+          { value: "unassigned", label: "Unassigned" },
+          ...profiles.map((p) => ({ value: p.id, label: p.fullName })),
+        ],
+      },
+    ],
+    [assignedToFilter, profiles],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return parties.filter((p) => {
+    const rows = parties.filter((p) => {
       if (statusFilter !== "All" && p.status !== statusFilter) return false;
       if (lifeFilter !== "All" && p.life !== lifeFilter) return false;
       if (areaFilter !== "All" && p.area !== areaFilter) return false;
+      if (assignedToFilter !== "All") {
+        if (assignedToFilter === "unassigned" ? p.assignedTo != null : p.assignedTo !== assignedToFilter) {
+          return false;
+        }
+      }
       if (q) {
         const members = membersByParty.get(p.id) ?? [];
         const hay = `${partyDisplayName(p, members)} ${members.map((m) => m.name).join(" ")} ${p.area}`;
@@ -101,7 +164,20 @@ export function PartiesListPage() {
       }
       return true;
     });
-  }, [parties, membersByParty, search, statusFilter, lifeFilter, areaFilter]);
+    const sorted = [...rows].sort((a, b) => compareParties(a, b, sortField, membersByParty, profileNames));
+    return sortDir === "asc" ? sorted : sorted.reverse();
+  }, [
+    parties,
+    membersByParty,
+    search,
+    statusFilter,
+    lifeFilter,
+    areaFilter,
+    assignedToFilter,
+    sortField,
+    sortDir,
+    profileNames,
+  ]);
 
   const handleNew = () => {
     const party = blankParty(`new-${Date.now()}`);
@@ -112,7 +188,11 @@ export function PartiesListPage() {
   };
 
   const hasFilters =
-    search.trim() !== "" || statusFilter !== "All" || lifeFilter !== "All" || areaFilter !== "All";
+    search.trim() !== "" ||
+    statusFilter !== "All" ||
+    lifeFilter !== "All" ||
+    areaFilter !== "All" ||
+    assignedToFilter !== "All";
 
   const filteredPeopleCount = useMemo(
     () => filtered.reduce((sum, p) => sum + (membersByParty.get(p.id)?.length ?? 0), 0),
@@ -151,12 +231,14 @@ export function PartiesListPage() {
         areaValue={areaFilter}
         onAreaChange={setAreaFilter}
         areaOptions={areaOptions}
+        extraFilters={extraFilters}
         hasFilters={hasFilters}
         onClear={() => {
           setSearch("");
           setStatusFilter("All");
           setLifeFilter("All");
           setAreaFilter("All");
+          setAssignedToFilter("All");
         }}
       />
 
@@ -168,7 +250,15 @@ export function PartiesListPage() {
         {filtered.length === 0 ? (
           <EmptyState label="parties" hasFilters={hasFilters} />
         ) : (
-          <PartyTable parties={filtered} people={people} onSelect={(id) => router.push(`/directory/parties/${id}`)} />
+          <PartyTable
+            parties={filtered}
+            people={people}
+            profileNames={profileNames}
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={onSort}
+            onSelect={(id) => router.push(`/directory/parties/${id}`)}
+          />
         )}
       </div>
     </div>

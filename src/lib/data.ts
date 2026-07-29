@@ -1,6 +1,6 @@
 import { getServerSupabase } from "./supabase/server";
 import { SEED_GROUPS, SEED_PARTIES, SEED_PEOPLE } from "./seed";
-import type { Group, Party, Person } from "./types";
+import type { Group, Party, Person, Profile } from "./types";
 
 // ============================================================
 // DB row <-> domain mappers (Postgres snake_case <-> camelCase)
@@ -32,7 +32,11 @@ function rowToGroup(r: any): Group {
     placementDetails: r.placement_details ?? "",
     lat: r.lat,
     lng: r.lng,
+    assignedTo: r.assigned_to ? String(r.assigned_to) : null,
     updatedAt: r.updated_at,
+    createdAt: r.created_at,
+    createdBy: r.created_by ?? null,
+    updatedBy: r.updated_by ?? null,
   };
 }
 
@@ -55,7 +59,11 @@ function rowToParty(r: any): Party {
     notes: r.notes ?? "",
     lat: r.lat,
     lng: r.lng,
+    assignedTo: r.assigned_to ? String(r.assigned_to) : null,
     updatedAt: r.updated_at,
+    createdAt: r.created_at,
+    createdBy: r.created_by ?? null,
+    updatedBy: r.updated_by ?? null,
   };
 }
 
@@ -67,6 +75,13 @@ function rowToPerson(r: any): Person {
     email: r.email ?? "",
     phone: r.phone ?? "",
     updatedAt: r.updated_at,
+  };
+}
+
+function rowToProfile(r: any): Profile {
+  return {
+    id: String(r.id),
+    fullName: (r.full_name ?? "").trim() || "Unnamed coordinator",
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -115,4 +130,19 @@ export async function getPeople(): Promise<Person[]> {
     .order("name");
   if (error) throw new Error(`Couldn't load people: ${error.message}`);
   return (data ?? []).map(rowToPerson);
+}
+
+/** Every registered coordinator account — the source list for "Assigned
+ * to" pickers/filters/columns. No seed-mode fallback needed: demo mode has
+ * no auth at all, so an empty list is the correct "no coordinators exist
+ * yet" state rather than fabricated data. */
+export async function getProfiles(): Promise<Profile[]> {
+  const supabase = await getServerSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .order("full_name");
+  if (error) throw new Error(`Couldn't load coordinators: ${error.message}`);
+  return (data ?? []).map(rowToProfile);
 }

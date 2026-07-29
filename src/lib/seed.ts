@@ -11,7 +11,7 @@ export const SEED_GROUPS: Group[] = [
     contactEmail: "riverside@connecttvc.org", address: "412 Elm Ct, Eastside",
     desc: "A relaxed weeknight dinner where families share a meal and a short devotional while the kids play together.",
     placementDetails: "Childcare on site; street parking only, arrive a few minutes early.",
-
+    assignedTo: null,
   },
   {
     id: "2", name: "Sunrise Circle", day: "Wed", time: "6:30 AM", area: "Downtown",
@@ -21,7 +21,7 @@ export const SEED_GROUPS: Group[] = [
     contactEmail: "sunrise@connecttvc.org", address: "88 Market St, Downtown",
     desc: "An early coffee-and-study for young professionals to start the day grounded before work.",
     placementDetails: "Currently full — worth checking back, spots turn over as folks relocate for work.",
-
+    assignedTo: null,
   },
   {
     id: "3", name: "The Front Porch", day: "Thu", time: "7:30 PM", area: "North Hills",
@@ -31,7 +31,7 @@ export const SEED_GROUPS: Group[] = [
     contactEmail: "frontporch@connecttvc.org", address: "9 Crestview Rd, North Hills",
     desc: "An open, come-as-you-are group that is perfect for anyone new to the area or just exploring.",
     placementDetails: "Hybrid — a Zoom link goes out to the group same-day for anyone joining online.",
-
+    assignedTo: null,
   },
   {
     id: "4", name: "Oak & Ember", day: "Sun", time: "5:00 PM", area: "Westgate",
@@ -41,7 +41,7 @@ export const SEED_GROUPS: Group[] = [
     contactEmail: "oakember@connecttvc.org", address: "220 Birch Ln, Westgate",
     desc: "A close-knit Sunday group for couples building rhythms of faith and friendship together.",
     placementDetails: "Childcare available with advance notice — text the host by Friday.",
-
+    assignedTo: null,
   },
   {
     id: "5", name: "Common Grounds", day: "Mon", time: "12:00 PM", area: "Midtown",
@@ -51,7 +51,7 @@ export const SEED_GROUPS: Group[] = [
     contactEmail: "commongrounds@connecttvc.org", address: "1 University Plz, Midtown",
     desc: "A midday, campus-adjacent gathering for students to connect and recharge over lunch.",
     placementDetails: "Meets in the campus plaza food court — look for the Connect TVC table tent.",
-
+    assignedTo: null,
   },
 ];
 
@@ -63,6 +63,7 @@ export const SEED_PARTIES: Party[] = [
     interests: "Marriage, serving together", childcareNeeded: false, accessibility: "—",
     status: "New", group: null, joined: "Jun 2026",
     notes: "Recently married, new to Connect TVC and eager to plug in.",
+    assignedTo: null,
   },
   {
     id: "sl", partyName: "",
@@ -71,6 +72,7 @@ export const SEED_PARTIES: Party[] = [
     interests: "Parenting, cooking", childcareNeeded: true, accessibility: "—",
     status: "Grouped", group: "1", joined: "Feb 2026",
     notes: "Family of four, needs childcare on meeting nights.",
+    assignedTo: null,
   },
   {
     id: "mb", partyName: "",
@@ -79,6 +81,7 @@ export const SEED_PARTIES: Party[] = [
     interests: "Hiking, apologetics", childcareNeeded: false,
     accessibility: "Prefers ground-floor access", status: "Waitlisted", group: null,
     joined: "May 2026", notes: "New in town, flexible on timing.",
+    assignedTo: null,
   },
   {
     id: "aw", partyName: "",
@@ -87,6 +90,7 @@ export const SEED_PARTIES: Party[] = [
     interests: "Worship, mentoring", childcareNeeded: false, accessibility: "—",
     status: "Actively Searching", group: null, joined: "Jul 2026",
     notes: "Prefers an early-morning group downtown.",
+    assignedTo: null,
   },
   {
     id: "dt", partyName: "",
@@ -95,6 +99,7 @@ export const SEED_PARTIES: Party[] = [
     interests: "Study groups, gaming", childcareNeeded: false, accessibility: "—",
     status: "Grouped", group: "5", joined: "Aug 2026",
     notes: "Sophomore, connected through campus ministry.",
+    assignedTo: null,
   },
 ];
 

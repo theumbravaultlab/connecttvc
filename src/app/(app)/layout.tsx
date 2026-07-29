@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/AppShell";
-import { getGroups, getParties, getPeople } from "@/lib/data";
-import { getViewerEmail } from "@/lib/auth";
+import { getGroups, getParties, getPeople, getProfiles } from "@/lib/data";
+import { getViewerProfile } from "@/lib/auth";
 import { supabaseConfigured } from "@/lib/supabase/config";
 
 // The proxy already gated every route under here; every viewer is an
@@ -12,11 +12,12 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [groups, parties, people, email] = await Promise.all([
+  const [groups, parties, people, profiles, viewer] = await Promise.all([
     getGroups(),
     getParties(),
     getPeople(),
-    getViewerEmail(),
+    getProfiles(),
+    getViewerProfile(),
   ]);
 
   return (
@@ -25,7 +26,9 @@ export default async function AppLayout({
         groups={groups}
         parties={parties}
         people={people}
-        userEmail={email}
+        profiles={profiles}
+        viewerId={viewer?.id ?? null}
+        viewerEmail={viewer?.email ?? null}
         persisted={supabaseConfigured}
       >
         {children}

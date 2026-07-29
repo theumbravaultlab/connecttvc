@@ -13,6 +13,15 @@ const controlClass =
  * (aria-label-only selects with no visible label, at a shorter py-1.5 than
  * the Map's filter grid). Now one component with visible labels and the
  * same control height used everywhere else filters appear. */
+export type ExtraFilter = {
+  key: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  allLabel: string;
+};
+
 export function ListFilterBar<TStatus extends string>({
   search,
   onSearchChange,
@@ -25,6 +34,7 @@ export function ListFilterBar<TStatus extends string>({
   areaValue,
   onAreaChange,
   areaOptions,
+  extraFilters,
   hasFilters,
   onClear,
 }: {
@@ -39,6 +49,11 @@ export function ListFilterBar<TStatus extends string>({
   areaValue: string;
   onAreaChange: (v: string) => void;
   areaOptions: string[];
+  /** Extra dropdown filters beyond the fixed Status/Life/City trio (e.g.
+   * Meeting Day, Assigned To) — kept as an optional add-on rather than
+   * folding Status/Life/City into the same generic shape, so those three
+   * stay strongly typed (TStatus) instead of becoming plain strings. */
+  extraFilters?: ExtraFilter[];
   hasFilters: boolean;
   onClear: () => void;
 }) {
@@ -116,6 +131,26 @@ export function ListFilterBar<TStatus extends string>({
           ))}
         </select>
       </div>
+      {extraFilters?.map((f) => (
+        <div key={f.key} className="w-[150px]">
+          <label htmlFor={f.key} className={labelClass}>
+            {f.label}
+          </label>
+          <select
+            id={f.key}
+            value={f.value}
+            onChange={(e) => f.onChange(e.target.value)}
+            className={controlClass}
+          >
+            <option value="All">{f.allLabel}</option>
+            {f.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ))}
       {hasFilters && (
         <button
           type="button"

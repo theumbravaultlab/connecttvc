@@ -1,6 +1,6 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-07-27 · commit `fa0be3c` (pending: 017 v2 sample data generator + the five-city expansion batch, 018 — neither committed yet)
+Last updated: 2026-07-27 · commit `fa0be3c` (pending: the 017 v2 sample data generator, the 018 five-city expansion batch, and the coordinator identity/assignment/sort-filter/audit-trail batch — none committed yet)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -355,8 +355,11 @@ src/
       reports/
         page.tsx                — "/reports" — management-facing data visuals (<ReportsPage>)
   components/
-    AppShell.tsx            — header + Map|Directory|Reports nav links + <DirectoryDataProvider>,
-                               mounts <APIProvider> for Google Maps once for every routed page
+    AppShell.tsx            — header (incl. AccountMenu, the name/avatar block) + Map|Directory|
+                               Reports nav links + <DirectoryDataProvider>, mounts <APIProvider>
+                               for Google Maps once for every routed page
+    EditDisplayNameModal.tsx — lets a signed-in coordinator set their own display name; same
+                               overlay/panel pattern as ConfirmDialog.tsx
     ConfirmDialog.tsx        — themed delete-confirmation modal (replaces window.confirm)
     reports/
       ReportsPage.tsx           — computes aggregates from groups/people, renders every report section
@@ -387,6 +390,11 @@ src/
                                  the signed-in coordinator (see "New outreach/contact log" below)
       PlacementHistory.tsx      — read-only, auto-generated log of every group a party has been
                                  assigned to over time (see "Soft delete + placement history" below)
+      EntityPicker.tsx          — generic searchable single-select combobox (extracted from the old
+                                 one-off AssignedGroupPicker); drives "Assigned group" and every
+                                 new "Assigned to" (coordinator) picker on both forms
+      AdminFooter.tsx           — read-only "Created/Last updated, by whom" footer on Group/Party
+                                 edit pages only (see "Coordinator identity..." below)
       form-bits.tsx            — shared Field/SectionHeading/BackLink layout helpers
     finder/
       Finder.tsx               — Map tab: filters, "Finding for" search, group list, travel-time fetch
@@ -472,12 +480,19 @@ supabase/
                                  p201-p220, cp301-cp330); new group names checked against 017's
                                  125 to guarantee no collisions. Requires 017 already run with its
                                  ids intact. See "Five-city expansion" below.
+  019_assignments_display_names.sql — adds "leaders read all profiles" +
+                                 "update own profile" RLS policies (profiles previously only
+                                 allowed reading your own row, with no update policy at all), plus
+                                 assigned_to (uuid FK to profiles, ON DELETE SET NULL) and
+                                 created_by/updated_by (text snapshots) on both groups and parties.
+                                 NOT CONFIRMED RUN. See "Coordinator identity, assignment,
+                                 sort/filter, and audit trail" below.
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (superseded, don't run)  →  015_soft_delete.sql  →  016_placement_history.sql  →  017_bulk_sample_data_v2.sql (optional)  →  018_five_city_expansion.sql (optional, additive)
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (superseded, don't run)  →  015_soft_delete.sql  →  016_placement_history.sql  →  017_bulk_sample_data_v2.sql (optional)  →  018_five_city_expansion.sql (optional, additive)  →  019_assignments_display_names.sql
 ```
 
 **Current live/production status: schema.sql, seed.sql, 002, 003, 004,
@@ -499,6 +514,14 @@ batch (no deletes) — run it any time more sample households in those 5
 specific cities are wanted; unlike 005/014/017 it never wipes existing
 data, so it's lower-risk, but it still shouldn't be run once real
 coordinator-entered data exists (it's still fictional sample data).
+`019_assignments_display_names.sql` is **not yet confirmed run** — it adds
+two new RLS policies on `profiles` plus `assigned_to`/`created_by`/
+`updated_by` columns on `groups`/`parties`; the app code that depends on
+it (the header display-name editor, every "Assigned to" field/column/
+filter, and the new "Record info" footer) is already live in this commit,
+so run this one promptly — those features will silently no-op or error
+against a real Supabase project until it's applied. See "Coordinator
+identity, assignment, sort/filter, and audit trail" below.
 
 **This directly affects `009_couple_host_naming.sql`: its 320 `UPDATE ...
 WHERE id = 'gN'` statements target ids that only exist once 005 has been
@@ -1732,6 +1755,121 @@ this project; the dev server also requires a real sign-in this session
 couldn't perform, and the Browser pane wasn't displaying frames when
 checked. The actual group with the bad address hasn't been identified or
 fixed yet — that's the next step once this ships, using the new link.
+
+## Coordinator identity, assignment, sort/filter, and audit trail
+
+Five-part request, planned via plan mode (Explore + Plan agents) given the
+scope — schema changes, a new RLS policy letting coordinators read each
+other's profiles, and cross-cutting UI work. Confirmed up front with the
+project owner: `assigned_to` is **organizational only, never an
+access-control mechanism** — every leader still sees/edits everything,
+consistent with this project's flat-permissions decision (see "Product
+direction" above). All five build on the same new plumbing:
+
+**Migration `supabase/019_assignments_display_names.sql`** (NOT CONFIRMED
+RUN) — additive only, no drops. Adds two RLS policies on `profiles`
+("leaders read all profiles" for select, "update own profile" for update
+— previously a user could only read their *own* row and couldn't update
+it at all) plus `assigned_to` (uuid FK to `profiles`, `on delete set
+null`) and `created_by`/`updated_by` (text) on both `groups` and
+`parties`. Noted directly in the migration file: the update-own-profile
+policy has no column-level restriction, so it technically also lets a
+user change their own `role` — accepted as low-risk since nothing in this
+app is gated on `'admin'` vs `'leader'` today.
+
+**Two deliberately different "who did this" patterns**, matching what
+already existed: audit fields (`contact_log.contacted_by`,
+`placement_history.assigned_by`, and the new `created_by`/`updated_by`)
+stay **snapshot text** — the coordinator's display name *at the time of
+the action*, written via a new `getViewerDisplayName()` helper
+(`src/lib/auth.ts`, prefers `profiles.full_name`, falls back to email)
+that replaced `getViewerEmail()` at all 4 existing snapshot-write call
+sites in `actions.ts`. Renaming yourself later doesn't rewrite history.
+`assigned_to`, in contrast, is a **live foreign key** — a "who currently
+owns this" relationship resolved to a name at read time, so a rename
+shows up everywhere immediately.
+
+1. **Self-service display name.** Clicking the name or avatar in
+   `AppShell.tsx`'s header (now a new `AccountMenu` sub-component) opens
+   `EditDisplayNameModal.tsx` (same overlay pattern as `ConfirmDialog.tsx`).
+   Saves via a new `updateOwnDisplayName()` action, relying entirely on
+   the new RLS policy — no service-role bypass. `profiles` is now fetched
+   once in `(app)/layout.tsx` (`getProfiles()`) and lives in
+   `DirectoryData`'s shared context alongside groups/parties/people, same
+   pattern as everything else, so the header updates instantly on save.
+2. **Assigned To on Groups and Parties.** New field on both edit forms
+   (`GroupForm.tsx` under Leadership, `PartyForm.tsx` under Assignment)
+   via a generic `EntityPicker.tsx` — extracted from the old one-off
+   `AssignedGroupPicker` in `PartyForm.tsx` (same searchable-combobox
+   behavior, now reused for "pick a group" *and* "pick a coordinator").
+   Both `GroupTable`/`PartyTable` (`tables.tsx`) gained a display-only
+   "Assigned To" column — confirmed with the project owner this should
+   **not** be inline-editable in the list, consistent with every other
+   column (click the row to edit on the record page instead).
+3. **Sort and filter every list column.** `tables.tsx` gained a shared
+   `SortableHeader` — every real column in both tables is now clickable
+   (chevron flips for asc/desc); Meeting Day sorts Mon→Sun via `DAYS`
+   index rather than alphabetically. `ListFilterBar.tsx` gained one new
+   optional `extraFilters` prop (an array of `{label, value, onChange,
+   options}` descriptors) rather than a full genericization of the
+   existing Status/Life/City selects — deliberately the lighter change,
+   since only 2 pages consume this component and flattening the 3
+   working, strongly-typed filters into untyped strings would cost type
+   safety for no real benefit. Groups gained Day + Assigned To filters;
+   Parties gained Assigned To (no per-party meeting day to filter on).
+4. **Assign Parties to a Group from the Group's own page.** `GroupForm.tsx`'s
+   previously read-only "Assigned parties" roster gained a search-to-add
+   box (`AddPartyToGroup`, a local component — deliberately not
+   `EntityPicker`, since this needs to stay open across multiple adds
+   rather than collapsing to one persistent selection) and a Remove button
+   per roster row. Both call new `assignParty`/`unassignParty` handlers in
+   `GroupEditPage.tsx` that persist **immediately** via the real
+   `saveParty()` action — not deferred to the Group page's own Save
+   button, since this mutates a different record than the one being
+   edited (same "immediate cross-record action" precedent as
+   `PartyEditPage.tsx`'s `removeMember`). Going through the real
+   `saveParty()` means `recordGroupChange()` fires automatically, so a
+   `placement_history` entry is written for free — and the Grouped ⇄
+   Actively Searching status auto-transition mirrors exactly what
+   `PartyForm.tsx`'s own picker already does, so the result is identical
+   regardless of which side initiates the assignment.
+5. **"Record info" admin footer.** New `AdminFooter.tsx` — read-only,
+   shows "Created [date] by [name]" / "Last updated [date] by [name]",
+   omitting either line if its timestamp is missing (new record). Added
+   to `GroupForm.tsx` and `PartyForm.tsx` only, per the project owner's
+   explicit scoping — **not** added anywhere in the Person/Members UI,
+   since People are edited inline within a Party's Members list and have
+   no page of their own for a footer to live on.
+
+`groupToRow`/`partyToRow` (`actions.ts`) now take a third `audit: {
+actorName, isNew }` param: `updated_by` is always set, but `created_by` is
+only included in the returned row object when `isNew` — Supabase's
+`.upsert()` only touches columns present in the payload, so omitting
+`created_by` on an update leaves whatever's already in the DB untouched
+instead of overwriting it with the current saver's name every time.
+`isNew` is just `existing === null`, already computed via the pre-existing
+`loadExistingGeo()` conflict check, so no extra query was needed.
+Deliberately **not** touched: `backfillGroupLocations`/
+`backfillPartyLocations` don't stamp `updated_by` — those are automatic
+geocode fill-ins, not a deliberate content edit by the viewing coordinator.
+
+Verified: `tsc`/`eslint` clean, full production build succeeds, demo/no-
+Supabase mode still boots (confirmed `SEED_GROUPS`/`SEED_PARTIES` compile
+with the new required `assignedTo: null` field, and `getProfiles()`/
+`getViewerProfile()` no-op to `[]`/`null` exactly like their existing
+siblings). One real lint finding surfaced and was fixed properly (not
+suppressed), consistent with this project's zero-eslint-problems standard:
+`EditDisplayNameModal.tsx`'s "reset the input when the modal reopens"
+logic was rewritten from a `useEffect` + `setState` into React's
+documented render-time state-adjustment pattern (comparing against a
+tracked `prevOpen`), the same fix already applied to several spots in
+`Finder.tsx` in an earlier round. **Not click-tested live** — same
+standing login-gated constraint as everything else in this project; this
+round specifically still needs, once 019 is run: confirming the RLS
+update policy actually lets a save through, confirming the "Assigned to"
+picker/column/filter round-trips correctly, confirming Day sorts Mon→Sun
+and not alphabetically, and confirming a Group-initiated party assignment
+shows up correctly on that party's own Placement History.
 
 ## What's built and verified working
 

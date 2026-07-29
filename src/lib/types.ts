@@ -71,8 +71,19 @@ export interface Group {
   // Geo (populated by geocoding on save).
   lat?: number | null;
   lng?: number | null;
+  // Who's the point-person for this group — purely organizational, never
+  // an access-control mechanism (every leader can still see/edit every
+  // group regardless). null = unassigned.
+  assignedTo: string | null;
   // Set by the DB trigger; used to detect a stale/conflicting save.
   updatedAt?: string;
+  // Audit trail — createdBy/updatedBy are display-name snapshots taken at
+  // the time of the action (see getViewerDisplayName()), not live-updating
+  // if that coordinator later renames themselves. createdAt/createdBy are
+  // only ever set once, on insert; updatedBy refreshes on every save.
+  createdAt?: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
 }
 
 /** A household/individual seeking placement — the unit "Finding for"
@@ -107,8 +118,15 @@ export interface Party {
   // Geo (populated by geocoding on save), same pattern as Group.
   lat?: number | null;
   lng?: number | null;
+  // Who's the point-person for this party — purely organizational, never
+  // an access-control mechanism. null = unassigned.
+  assignedTo: string | null;
   // Set by the DB trigger; used to detect a stale/conflicting save.
   updatedAt?: string;
+  // Audit trail — see the matching comment on Group.
+  createdAt?: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
 }
 
 /** One individual, linked to the Party that holds their matching/placement
@@ -133,6 +151,15 @@ export const DAY_LONG: Record<DayShort, string> = {
   Sat: "Saturday",
   Sun: "Sunday",
 };
+
+/** A registered coordinator account — the source list for "Assigned to"
+ * pickers/filters. Every signed-in user has one (auto-created on signup,
+ * see handle_new_user() in schema.sql); fullName defaults to their email
+ * until they set a real display name. */
+export interface Profile {
+  id: string;
+  fullName: string;
+}
 
 /** One entry in a party's outreach log — append-only, timestamped, and
  * auto-attributed to whichever coordinator logged it server-side. Exists

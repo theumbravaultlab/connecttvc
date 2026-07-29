@@ -1,14 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { APIProvider } from "@vis.gl/react-google-maps";
-import type { Group, Party, Person } from "@/lib/types";
+import type { Group, Party, Person, Profile } from "@/lib/types";
 import { initialsOf } from "@/lib/types";
 import { signOut } from "@/app/actions";
 import { Avatar } from "@/components/ui";
 import { HomeMark, MoonIcon, SunIcon } from "@/components/icons";
-import { DirectoryDataProvider } from "@/components/directory/DirectoryData";
+import { DirectoryDataProvider, useDirectoryData } from "@/components/directory/DirectoryData";
+import { EditDisplayNameModal } from "@/components/EditDisplayNameModal";
 import { useTheme } from "@/components/ThemeProvider";
 
 const BROWSER_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ?? "";
@@ -22,14 +24,18 @@ export function AppShell({
   groups,
   parties,
   people,
-  userEmail,
+  profiles,
+  viewerId,
+  viewerEmail,
   persisted,
   children,
 }: {
   groups: Group[];
   parties: Party[];
   people: Person[];
-  userEmail: string | null;
+  profiles: Profile[];
+  viewerId: string | null;
+  viewerEmail: string | null;
   persisted: boolean;
   children: React.ReactNode;
 }) {
@@ -45,7 +51,13 @@ export function AppShell({
   ).length;
 
   return (
-    <DirectoryDataProvider groups={groups} parties={parties} people={people} persisted={persisted}>
+    <DirectoryDataProvider
+      groups={groups}
+      parties={parties}
+      people={people}
+      profiles={profiles}
+      persisted={persisted}
+    >
       <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--surface)] print:h-auto print:overflow-visible">
         {/* unified header — hidden when printing/exporting a PDF */}
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--divider)] px-4 py-2.5 sm:px-6 sm:py-3 print:hidden">
@@ -84,20 +96,7 @@ export function AppShell({
             >
               {theme === "dark" ? <SunIcon width={17} height={17} /> : <MoonIcon width={17} height={17} />}
             </button>
-            <div className="text-right leading-tight">
-              <div className="max-w-[120px] truncate text-[12px] font-bold text-[var(--ink)] sm:max-w-[180px] sm:text-[13px]">
-                {userEmail ?? "Coordinator"}
-              </div>
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="text-[11px] font-bold text-[var(--brand-blue)] hover:underline"
-                >
-                  Sign out
-                </button>
-              </form>
-            </div>
-            <Avatar initials={initialsOf(userEmail ?? "Coordinator")} />
+            <AccountMenu viewerId={viewerId} viewerEmail={viewerEmail} />
           </div>
         </header>
 
@@ -132,6 +131,63 @@ export function AppShell({
         </MapsScope>
       </div>
     </DirectoryDataProvider>
+  );
+}
+
+/** The header's name/avatar block, plus the modal it opens. A descendant
+ * of DirectoryDataProvider (rendered inside AppShell's own JSX tree), so it
+ * can read the live `profiles` list and patch it on save — the same
+ * pattern every other piece of shared state in this app already uses. */
+function AccountMenu({
+  viewerId,
+  viewerEmail,
+}: {
+  viewerId: string | null;
+  viewerEmail: string | null;
+}) {
+  const { profiles, setProfiles } = useDirectoryData();
+  const [open, setOpen] = useState(false);
+  const me = profiles.find((p) => p.id === viewerId) ?? null;
+  const displayName = me?.fullName || viewerEmail || "Coordinator";
+
+  return (
+    <>
+      <div className="text-right leading-tight">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="max-w-[120px] truncate text-[12px] font-bold text-[var(--ink)] hover:underline sm:max-w-[180px] sm:text-[13px]"
+        >
+          {displayName}
+        </button>
+        <form action={signOut}>
+          <button
+            type="submit"
+            className="block text-[11px] font-bold text-[var(--brand-blue)] hover:underline"
+          >
+            Sign out
+          </button>
+        </form>
+      </div>
+      <button type="button" onClick={() => setOpen(true)} aria-label="Edit your display name">
+        <Avatar initials={initialsOf(displayName)} />
+      </button>
+      <EditDisplayNameModal
+        open={open}
+        initialName={me?.fullName ?? ""}
+        onClose={() => setOpen(false)}
+        onSaved={(newName) => {
+          if (viewerId) {
+            setProfiles((ps) =>
+              ps.some((p) => p.id === viewerId)
+                ? ps.map((p) => (p.id === viewerId ? { ...p, fullName: newName } : p))
+                : [...ps, { id: viewerId, fullName: newName }],
+            );
+          }
+          setOpen(false);
+        }}
+      />
+    </>
   );
 }
 

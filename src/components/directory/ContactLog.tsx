@@ -4,16 +4,7 @@ import { useEffect, useState } from "react";
 import { addContactLogEntry, getContactLog } from "@/app/actions";
 import type { ContactLogEntry } from "@/lib/types";
 import { TextInput } from "@/components/ui";
-
-function formatWhen(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+import { formatDateTime as formatWhen } from "@/lib/format";
 
 /** Append-only outreach history for one party, so any coordinator can see
  * at a glance whether — and when — this household was already reached out

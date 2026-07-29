@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DAYS,
@@ -10,6 +11,7 @@ import {
   type Group,
   type Party,
   type Person,
+  type Profile,
 } from "@/lib/types";
 import {
   Avatar,
@@ -21,20 +23,29 @@ import {
   TextInput,
   Toggle,
 } from "@/components/ui";
+import { PlusIcon, SearchIcon, XIcon } from "@/components/icons";
 import { spotsBadge } from "@/lib/colors";
 import { AddressAutocomplete } from "./AddressAutocomplete";
 import { SectionHeading, Field } from "./form-bits";
+import { EntityPicker } from "./EntityPicker";
+import { AdminFooter } from "./AdminFooter";
 
 export function GroupForm({
   group,
   parties,
   people,
+  profiles,
   onPatch,
+  onAssignParty,
+  onUnassignParty,
 }: {
   group: Group;
   parties: Party[];
   people: Person[];
+  profiles: Profile[];
   onPatch: (patch: Partial<Group>) => void;
+  onAssignParty: (party: Party) => void;
+  onUnassignParty: (party: Party) => void;
 }) {
   const router = useRouter();
   const roster = parties.filter((p) => p.group === group.id);
@@ -172,6 +183,17 @@ export function GroupForm({
             onChange={(e) => onPatch({ contactEmail: e.target.value })}
           />
         </Field>
+        <Field full label="Assigned to" tag="Point-person for this group — organizational only">
+          <EntityPicker
+            items={profiles}
+            selectedId={group.assignedTo}
+            getId={(p) => p.id}
+            getLabel={(p) => p.fullName}
+            searchPlaceholder="Search coordinators…"
+            noMatchLabel="No coordinators match."
+            onSelect={(assignedTo) => onPatch({ assignedTo })}
+          />
+        </Field>
       </div>
 
       <SectionHeading>Capacity &amp; fit</SectionHeading>
@@ -251,29 +273,137 @@ export function GroupForm({
       </div>
 
       <SectionHeading>Assigned parties ({roster.length})</SectionHeading>
+      <AddPartyToGroup
+        groupId={group.id}
+        parties={parties}
+        people={people}
+        onAssign={onAssignParty}
+      />
       {roster.length === 0 ? (
-        <p className="text-[12.5px] font-semibold text-[var(--faint)]">
+        <p className="mt-2 text-[12.5px] font-semibold text-[var(--faint)]">
           No one is currently assigned to this group.
         </p>
       ) : (
-        <div className="flex flex-col gap-1.5">
+        <div className="mt-2 flex flex-col gap-1.5">
           {roster.map((pt) => {
             const members = people.filter((p) => p.partyId === pt.id);
             return (
-              <button
+              <div
                 key={pt.id}
-                type="button"
-                onClick={() => router.push(`/directory/parties/${pt.id}`)}
-                className="flex items-center gap-2.5 rounded-xl bg-[var(--panel-1)] px-3 py-2 text-left transition-colors hover:bg-[var(--panel-2)]"
+                className="flex items-center gap-2.5 rounded-xl bg-[var(--panel-1)] px-3 py-2 transition-colors hover:bg-[var(--panel-2)]"
               >
-                <Avatar initials={initialsOf(partyDisplayName(pt, members))} size={26} tone="muted" />
-                <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-[var(--ink)]">
-                  {partyDisplayName(pt, members)}
-                </span>
-                <StatusPill status={pt.status} />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/directory/parties/${pt.id}`)}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                >
+                  <Avatar initials={initialsOf(partyDisplayName(pt, members))} size={26} tone="muted" />
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-[var(--ink)]">
+                    {partyDisplayName(pt, members)}
+                  </span>
+                  <StatusPill status={pt.status} />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUnassignParty(pt);
+                  }}
+                  aria-label={`Remove ${partyDisplayName(pt, members)} from this group`}
+                  className="shrink-0 rounded-full p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--panel-4)] hover:text-[oklch(0.55_0.18_20)]"
+                >
+                  <XIcon width={13} height={13} />
+                </button>
+              </div>
             );
           })}
+        </div>
+      )}
+
+      <SectionHeading>Record info</SectionHeading>
+      <AdminFooter
+        createdAt={group.createdAt}
+        createdBy={group.createdBy}
+        updatedAt={group.updatedAt}
+        updatedBy={group.updatedBy}
+      />
+    </div>
+  );
+}
+
+/** Search-to-add box for the "Assigned parties" roster — stays open across
+ * multiple adds (unlike EntityPicker's collapse-on-select combobox), since
+ * a coordinator is likely assigning more than one party to a group in one
+ * sitting. Excludes parties already on this group's roster. */
+function AddPartyToGroup({
+  groupId,
+  parties,
+  people,
+  onAssign,
+}: {
+  groupId: string;
+  parties: Party[];
+  people: Person[];
+  onAssign: (party: Party) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const unassigned = parties.filter((p) => p.group !== groupId);
+  const results = q
+    ? unassigned
+        .filter((p) => {
+          const members = people.filter((m) => m.partyId === p.id);
+          return partyDisplayName(p, members).toLowerCase().includes(q);
+        })
+        .slice(0, 8)
+    : [];
+
+  return (
+    <div>
+      <div className="relative">
+        <SearchIcon
+          width={14}
+          height={14}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--faint)]"
+        />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search parties to add…"
+          className="w-full rounded-[9px] border border-[var(--border)] bg-[var(--panel-1)] py-2 pl-9 pr-3 text-[13px] font-semibold text-[var(--ink)] outline-none transition-colors focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+        />
+      </div>
+      {q && (
+        <div className="mt-1.5 flex flex-col gap-1">
+          {results.length === 0 ? (
+            <p className="px-1 text-[12px] font-semibold text-[var(--faint)]">No parties match.</p>
+          ) : (
+            results.map((pt) => {
+              const members = people.filter((m) => m.partyId === pt.id);
+              return (
+                <div
+                  key={pt.id}
+                  className="flex items-center gap-2.5 rounded-xl border border-[var(--divider)] px-3 py-2"
+                >
+                  <Avatar initials={initialsOf(partyDisplayName(pt, members))} size={24} tone="muted" />
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-[var(--ink)]">
+                    {partyDisplayName(pt, members)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAssign(pt);
+                      setQuery("");
+                    }}
+                    className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--brand-blue-light)] px-2.5 py-1 text-[11.5px] font-bold text-[var(--brand-blue)] transition-colors hover:bg-[var(--panel-2)]"
+                  >
+                    <PlusIcon width={11} height={11} />
+                    Add
+                  </button>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
     </div>

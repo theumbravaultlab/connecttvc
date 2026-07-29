@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import type { Group, Party, Person } from "@/lib/types";
+import type { Group, Party, Person, Profile } from "@/lib/types";
 
 type DirectoryData = {
   groups: Group[];
@@ -17,6 +17,8 @@ type DirectoryData = {
   setParties: Dispatch<SetStateAction<Party[]>>;
   people: Person[];
   setPeople: Dispatch<SetStateAction<Person[]>>;
+  profiles: Profile[];
+  setProfiles: Dispatch<SetStateAction<Profile[]>>;
   persisted: boolean;
 };
 
@@ -29,21 +31,26 @@ export function DirectoryDataProvider({
   groups: initialGroups,
   parties: initialParties,
   people: initialPeople,
+  profiles: initialProfiles,
   persisted,
   children,
 }: {
   groups: Group[];
   parties: Party[];
   people: Person[];
+  profiles: Profile[];
   persisted: boolean;
   children: ReactNode;
 }) {
   const [groups, setGroups] = useState(initialGroups);
   const [parties, setParties] = useState(initialParties);
   const [people, setPeople] = useState(initialPeople);
+  const [profiles, setProfiles] = useState(initialProfiles);
 
   return (
-    <Ctx.Provider value={{ groups, setGroups, parties, setParties, people, setPeople, persisted }}>
+    <Ctx.Provider
+      value={{ groups, setGroups, parties, setParties, people, setPeople, profiles, setProfiles, persisted }}
+    >
       {children}
     </Ctx.Provider>
   );

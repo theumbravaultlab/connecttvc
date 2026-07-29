@@ -9,20 +9,14 @@ import {
   type Party,
 } from "@/lib/types";
 import { statusSolid } from "@/lib/colors";
+import { formatExportedAt } from "@/lib/format";
 import { HBar, PairedBarChart, ReportCard, SegmentedBar, StatCard } from "./charts";
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
 
 export function ReportsPage({ groups, parties }: { groups: Group[]; parties: Party[] }) {
   const stats = useMemo(() => computeStats(groups, parties), [groups, parties]);
-  const exportedAt = useMemo(
-    () =>
-      new Date().toLocaleString(undefined, {
-        dateStyle: "long",
-        timeStyle: "short",
-      }),
-    [],
-  );
+  const exportedAt = useMemo(() => formatExportedAt(new Date()), []);
 
   return (
     <div className="hw-scroll min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 print:h-auto print:overflow-visible print:flex-none">

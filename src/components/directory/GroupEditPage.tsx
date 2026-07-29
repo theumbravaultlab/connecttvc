@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { Group } from "@/lib/types";
-import { deleteGroup, saveGroup } from "@/app/actions";
+import type { Group, Party, PartyStatus } from "@/lib/types";
+import { deleteGroup, saveGroup, saveParty } from "@/app/actions";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useDirectoryData } from "./DirectoryData";
 import { BackLink } from "./form-bits";
@@ -16,9 +16,11 @@ function validateGroup(g: Group): string | null {
   return null;
 }
 
+const ACTIVELY_SEARCHING_LIKE: PartyStatus[] = ["New", "Actively Searching", "Waitlisted"];
+
 export function GroupEditPage({ id }: { id: string }) {
   const router = useRouter();
-  const { groups, parties, people, setGroups, persisted } = useDirectoryData();
+  const { groups, parties, people, profiles, setGroups, setParties, persisted } = useDirectoryData();
   const group = groups.find((g) => g.id === id) ?? null;
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -39,6 +41,62 @@ export function GroupEditPage({ id }: { id: string }) {
 
   const patchGroup = (patch: Partial<Group>) =>
     setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+
+  // Assigning/unassigning a party from the Group's own side mutates a
+  // *different* record (the Party's own `group` field) than the one this
+  // page is editing, so it persists immediately via the real saveParty()
+  // action rather than waiting on this page's own Save button — same
+  // "immediate cross-record action" precedent as PartyEditPage's
+  // removeMember(). Going through saveParty() also means
+  // recordGroupChange() fires automatically, so a placement_history entry
+  // gets written for free. Status auto-transitions the same way
+  // PartyForm's own "Assigned group" picker already does, so the result
+  // is identical regardless of which side initiated the assignment.
+  const assignParty = (party: Party) => {
+    startTransition(async () => {
+      const nextStatus: PartyStatus = party.status === "Grouped" ? party.status : "Grouped";
+      const result = await saveParty({ ...party, group: group.id, status: nextStatus });
+      if (!result.ok) {
+        setSaveState("error");
+        setSaveError(result.error ?? "Couldn't assign that party.");
+        return;
+      }
+      setParties((ps) =>
+        ps.map((p) =>
+          p.id === party.id
+            ? {
+                ...p,
+                group: group.id,
+                status: nextStatus,
+                updatedAt: result.updatedAt,
+                area: result.area ?? p.area,
+                lat: result.lat ?? p.lat,
+                lng: result.lng ?? p.lng,
+              }
+            : p,
+        ),
+      );
+    });
+  };
+
+  const unassignParty = (party: Party) => {
+    startTransition(async () => {
+      const nextStatus: PartyStatus = ACTIVELY_SEARCHING_LIKE.includes(party.status)
+        ? party.status
+        : "Actively Searching";
+      const result = await saveParty({ ...party, group: null, status: nextStatus });
+      if (!result.ok) {
+        setSaveState("error");
+        setSaveError(result.error ?? "Couldn't remove that assignment.");
+        return;
+      }
+      setParties((ps) =>
+        ps.map((p) =>
+          p.id === party.id ? { ...p, group: null, status: nextStatus, updatedAt: result.updatedAt } : p,
+        ),
+      );
+    });
+  };
 
   const handleSave = () => {
     const err = validateGroup(group);
@@ -64,6 +122,9 @@ export function GroupEditPage({ id }: { id: string }) {
           area: result.area,
           lat: result.lat,
           lng: result.lng,
+          createdAt: result.createdAt,
+          createdBy: result.createdBy,
+          updatedBy: result.updatedBy,
         });
         setTimeout(() => setSaveState("idle"), 1500);
       } else {
@@ -99,7 +160,15 @@ export function GroupEditPage({ id }: { id: string }) {
       )}
       <div className="hw-scroll min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[760px] px-4 py-5 sm:px-6">
-          <GroupForm group={group} parties={parties} people={people} onPatch={patchGroup} />
+          <GroupForm
+            group={group}
+            parties={parties}
+            people={people}
+            profiles={profiles}
+            onPatch={patchGroup}
+            onAssignParty={assignParty}
+            onUnassignParty={unassignParty}
+          />
         </div>
       </div>
       <SaveBar

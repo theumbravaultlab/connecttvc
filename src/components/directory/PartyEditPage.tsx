@@ -19,7 +19,7 @@ function validateParty(members: Person[]): string | null {
 
 export function PartyEditPage({ id }: { id: string }) {
   const router = useRouter();
-  const { groups, parties, setParties, people, setPeople, persisted } = useDirectoryData();
+  const { groups, parties, setParties, people, setPeople, profiles, persisted } = useDirectoryData();
   const party = parties.find((p) => p.id === id) ?? null;
   const members = people.filter((p) => p.partyId === id);
 
@@ -102,6 +102,9 @@ export function PartyEditPage({ id }: { id: string }) {
         area: partyResult.area,
         lat: partyResult.lat,
         lng: partyResult.lng,
+        createdAt: partyResult.createdAt,
+        createdBy: partyResult.createdBy,
+        updatedBy: partyResult.updatedBy,
       });
 
       const memberResults = await Promise.all(members.map((m) => savePerson(m)));
@@ -160,6 +163,7 @@ export function PartyEditPage({ id }: { id: string }) {
             party={party}
             members={members}
             groups={groups}
+            profiles={profiles}
             onPatch={patchParty}
             onAddMember={addMember}
             onUpdateMember={patchMember}

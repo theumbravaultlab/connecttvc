@@ -2,31 +2,67 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GROUP_STATUSES, type Group, type GroupStatus } from "@/lib/types";
+import { DAYS, GROUP_STATUSES, type DayShort, type Group, type GroupStatus } from "@/lib/types";
 import { backfillGroupLocations } from "@/app/actions";
 import { PlusIcon } from "@/components/icons";
 import { useDirectoryData } from "./DirectoryData";
 import { DirectoryNav } from "./DirectoryNav";
-import { ListFilterBar } from "./ListFilterBar";
-import { EmptyState, GroupTable } from "./tables";
+import { ListFilterBar, type ExtraFilter } from "./ListFilterBar";
+import { EmptyState, GroupTable, type GroupSortField, type SortDir } from "./tables";
 
 const blankGroup = (id: string): Group => ({
   id, name: "New Home Group", day: "Tue", time: "7:00 PM", area: "",
   host: "", mentor: "—", life: "Everyone", status: "New", format: "In-person",
   freq: "Weekly", capacity: 12, members: 0, childcare: false, topic: "",
   ageRange: "All ages", startDate: "", contactEmail: "", address: "", desc: "",
-  placementDetails: "",
+  placementDetails: "", assignedTo: null,
 });
+
+function compareGroups(a: Group, b: Group, field: GroupSortField, profileNames: Map<string, string>): number {
+  switch (field) {
+    case "name":
+      return a.name.localeCompare(b.name);
+    case "day":
+      return DAYS.indexOf(a.day) - DAYS.indexOf(b.day);
+    case "area":
+      return a.area.localeCompare(b.area);
+    case "life":
+      return a.life.localeCompare(b.life);
+    case "status":
+      return GROUP_STATUSES.indexOf(a.status) - GROUP_STATUSES.indexOf(b.status);
+    case "spots":
+      return (a.capacity - a.members) - (b.capacity - b.members);
+    case "assignedTo": {
+      const an = a.assignedTo ? (profileNames.get(a.assignedTo) ?? "") : "";
+      const bn = b.assignedTo ? (profileNames.get(b.assignedTo) ?? "") : "";
+      return an.localeCompare(bn);
+    }
+    default:
+      return 0;
+  }
+}
 
 export function GroupsListPage() {
   const router = useRouter();
-  const { groups, setGroups } = useDirectoryData();
+  const { groups, setGroups, profiles } = useDirectoryData();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<GroupStatus | "All">("All");
   const [lifeFilter, setLifeFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
+  const [dayFilter, setDayFilter] = useState<DayShort | "All">("All");
+  const [assignedToFilter, setAssignedToFilter] = useState("All");
+  const [sortField, setSortField] = useState<GroupSortField>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+
+  const onSort = (field: GroupSortField) => {
+    if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const missingLocations = groups.filter(
     (g) => g.address.trim() && (g.lat == null || g.lng == null),
@@ -75,16 +111,51 @@ export function GroupsListPage() {
     [groups],
   );
 
+  const profileNames = useMemo(() => new Map(profiles.map((p) => [p.id, p.fullName])), [profiles]);
+
+  const extraFilters: ExtraFilter[] = useMemo(
+    () => [
+      {
+        key: "day",
+        label: "Meeting day",
+        value: dayFilter,
+        onChange: (v) => setDayFilter(v as DayShort | "All"),
+        allLabel: "All days",
+        options: DAYS.map((d) => ({ value: d, label: d })),
+      },
+      {
+        key: "assignedTo",
+        label: "Assigned to",
+        value: assignedToFilter,
+        onChange: setAssignedToFilter,
+        allLabel: "All coordinators",
+        options: [
+          { value: "unassigned", label: "Unassigned" },
+          ...profiles.map((p) => ({ value: p.id, label: p.fullName })),
+        ],
+      },
+    ],
+    [dayFilter, assignedToFilter, profiles],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return groups.filter((g) => {
+    const rows = groups.filter((g) => {
       if (statusFilter !== "All" && g.status !== statusFilter) return false;
       if (lifeFilter !== "All" && g.life !== lifeFilter) return false;
       if (areaFilter !== "All" && g.area !== areaFilter) return false;
+      if (dayFilter !== "All" && g.day !== dayFilter) return false;
+      if (assignedToFilter !== "All") {
+        if (assignedToFilter === "unassigned" ? g.assignedTo != null : g.assignedTo !== assignedToFilter) {
+          return false;
+        }
+      }
       if (q && !`${g.name} ${g.area} ${g.host}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [groups, search, statusFilter, lifeFilter, areaFilter]);
+    const sorted = [...rows].sort((a, b) => compareGroups(a, b, sortField, profileNames));
+    return sortDir === "asc" ? sorted : sorted.reverse();
+  }, [groups, search, statusFilter, lifeFilter, areaFilter, dayFilter, assignedToFilter, sortField, sortDir, profileNames]);
 
   const handleNew = () => {
     const g = blankGroup(`new-${Date.now()}`);
@@ -93,7 +164,12 @@ export function GroupsListPage() {
   };
 
   const hasFilters =
-    search.trim() !== "" || statusFilter !== "All" || lifeFilter !== "All" || areaFilter !== "All";
+    search.trim() !== "" ||
+    statusFilter !== "All" ||
+    lifeFilter !== "All" ||
+    areaFilter !== "All" ||
+    dayFilter !== "All" ||
+    assignedToFilter !== "All";
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -127,12 +203,15 @@ export function GroupsListPage() {
         areaValue={areaFilter}
         onAreaChange={setAreaFilter}
         areaOptions={areaOptions}
+        extraFilters={extraFilters}
         hasFilters={hasFilters}
         onClear={() => {
           setSearch("");
           setStatusFilter("All");
           setLifeFilter("All");
           setAreaFilter("All");
+          setDayFilter("All");
+          setAssignedToFilter("All");
         }}
       />
 
@@ -144,7 +223,14 @@ export function GroupsListPage() {
         {filtered.length === 0 ? (
           <EmptyState label="groups" hasFilters={hasFilters} />
         ) : (
-          <GroupTable groups={filtered} onSelect={(id) => router.push(`/directory/groups/${id}`)} />
+          <GroupTable
+            groups={filtered}
+            profileNames={profileNames}
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={onSort}
+            onSelect={(id) => router.push(`/directory/groups/${id}`)}
+          />
         )}
       </div>
     </div>

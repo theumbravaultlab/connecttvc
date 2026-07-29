@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Group, Party, Person } from "@/lib/types";
 import { initialsOf, partyDisplayName, partyMemberNames } from "@/lib/types";
 import { Avatar, LifeTag, PartyTag, StatusPill } from "@/components/ui";
-import { SearchIcon } from "@/components/icons";
+import { ChevronDownIcon, SearchIcon } from "@/components/icons";
 
 export function EmptyState({ label, hasFilters }: { label: "groups" | "parties"; hasFilters: boolean }) {
   return (
@@ -20,23 +20,76 @@ export function EmptyState({ label, hasFilters }: { label: "groups" | "parties";
 const th = "px-4 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-[var(--faint)]";
 const td = "px-4 py-2.5 text-[13px] font-semibold text-[var(--ink)]";
 
+export type SortDir = "asc" | "desc";
+
+/** A clickable `<th>` that reports which field it represents and toggles a
+ * chevron for the active sort direction. Shared by GroupTable/PartyTable —
+ * the only two consumers of a table header in this app, so this lives here
+ * rather than in a separate file. */
+function SortableHeader<F extends string>({
+  field,
+  label,
+  sortField,
+  sortDir,
+  onSort,
+}: {
+  field: F;
+  label: string;
+  sortField: F;
+  sortDir: SortDir;
+  onSort: (field: F) => void;
+}) {
+  const active = field === sortField;
+  return (
+    <th className={th}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="flex items-center gap-1 transition-colors hover:text-[var(--ink)]"
+      >
+        {label}
+        <ChevronDownIcon
+          width={11}
+          height={11}
+          className={active ? "text-[var(--ink)]" : "text-[var(--faint)] opacity-40"}
+          style={{ transform: active && sortDir === "desc" ? "rotate(180deg)" : undefined }}
+        />
+      </button>
+    </th>
+  );
+}
+
+export type GroupSortField = "name" | "day" | "area" | "life" | "status" | "spots" | "assignedTo";
+
 export function GroupTable({
   groups,
+  profileNames,
+  sortField,
+  sortDir,
+  onSort,
   onSelect,
 }: {
   groups: Group[];
+  /** id -> display name, built once per list page from the shared
+   * `profiles` list — keeps this table a dumb renderer that never itself
+   * looks up a coordinator's name. */
+  profileNames: Map<string, string>;
+  sortField: GroupSortField;
+  sortDir: SortDir;
+  onSort: (field: GroupSortField) => void;
   onSelect: (id: string) => void;
 }) {
   return (
-    <table className="w-full min-w-[640px] border-collapse">
+    <table className="w-full min-w-[760px] border-collapse">
       <thead className="sticky top-0 z-10 bg-[var(--surface)]">
         <tr className="border-b border-[var(--divider)]">
-          <th className={th}>Name</th>
-          <th className={th}>Meeting Day</th>
-          <th className={th}>City</th>
-          <th className={th}>Life Stage</th>
-          <th className={th}>Status</th>
-          <th className={th}>Spots Available</th>
+          <SortableHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="day" label="Meeting Day" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="area" label="City" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="life" label="Life Stage" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="spots" label="Spots Available" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="assignedTo" label="Assigned To" sortField={sortField} sortDir={sortDir} onSort={onSort} />
         </tr>
       </thead>
       <tbody>
@@ -62,6 +115,7 @@ export function GroupTable({
               <td className={td}>
                 {spots} of {g.capacity}
               </td>
+              <td className={td}>{g.assignedTo ? (profileNames.get(g.assignedTo) ?? "—") : "—"}</td>
             </tr>
           );
         })}
@@ -70,25 +124,36 @@ export function GroupTable({
   );
 }
 
+export type PartySortField = "name" | "area" | "life" | "status" | "assignedTo";
+
 export function PartyTable({
   parties,
   people,
+  profileNames,
+  sortField,
+  sortDir,
+  onSort,
   onSelect,
 }: {
   parties: Party[];
   people: Person[];
+  profileNames: Map<string, string>;
+  sortField: PartySortField;
+  sortDir: SortDir;
+  onSort: (field: PartySortField) => void;
   onSelect: (id: string) => void;
 }) {
   const router = useRouter();
 
   return (
-    <table className="w-full min-w-[600px] border-collapse">
+    <table className="w-full min-w-[700px] border-collapse">
       <thead className="sticky top-0 z-10 bg-[var(--surface)]">
         <tr className="border-b border-[var(--divider)]">
-          <th className={th}>Name</th>
-          <th className={th}>Home City</th>
-          <th className={th}>Life Stage</th>
-          <th className={th}>Status</th>
+          <SortableHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="area" label="Home City" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="life" label="Life Stage" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <SortableHeader field="assignedTo" label="Assigned To" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <th className={th}></th>
         </tr>
       </thead>
@@ -126,6 +191,7 @@ export function PartyTable({
                 <td className={td}>
                   <StatusPill status={pt.status} />
                 </td>
+                <td className={td}>{pt.assignedTo ? (profileNames.get(pt.assignedTo) ?? "—") : "—"}</td>
                 <td className={`${td} text-right`}>
                   <button
                     type="button"
@@ -153,7 +219,7 @@ export function PartyTable({
                         <span className="text-[12.5px] font-semibold">{m.name}</span>
                       </span>
                     </td>
-                    <td colSpan={4} className={`${td} text-[12px] font-medium text-[var(--faint)]`}>
+                    <td colSpan={5} className={`${td} text-[12px] font-medium text-[var(--faint)]`}>
                       {[m.email, m.phone].filter(Boolean).join(" · ") || "No contact info on file"}
                     </td>
                   </tr>

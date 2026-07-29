@@ -3,14 +3,7 @@
 import { useEffect, useState } from "react";
 import { getPlacementHistory } from "@/app/actions";
 import type { PlacementHistoryEntry } from "@/lib/types";
-
-function formatWhen(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import { formatDate as formatWhen } from "@/lib/format";
 
 /** Read-only, auto-generated log of every group this party has ever been
  * assigned to — written by saveParty() whenever the assigned group

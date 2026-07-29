@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { getViewerEmail } from "@/lib/auth";
+import { getViewerDisplayName } from "@/lib/auth";
 import { geocodeAddress, type GeoResult } from "@/lib/geocode";
 import { getTravelTimes, type TravelTime } from "@/lib/routes";
 import type { ContactLogEntry, Group, Party, PlacementHistoryEntry, Person } from "@/lib/types";
@@ -13,7 +13,14 @@ type SupabaseClient = NonNullable<Awaited<ReturnType<typeof getServerSupabase>>>
 // present) overrides area/lat/lng with freshly-geocoded values — area is
 // auto-derived from the address's city, never hand-picked, so a fresh
 // geocode is always authoritative over whatever was already on the record.
-function groupToRow(g: Group, geo?: GeoResult | null) {
+// `audit.actorName` stamps `updated_by` on every save; `created_by` is only
+// included in the returned object when `audit.isNew` is true — Supabase's
+// upsert() only touches columns present in the payload, so omitting
+// `created_by` on an update leaves whatever value is already in the DB
+// untouched instead of stomping it with the current saver's name.
+type Audit = { actorName: string | null; isNew: boolean };
+
+function groupToRow(g: Group, geo: GeoResult | null | undefined, audit: Audit) {
   return {
     id: g.id,
     name: g.name,
@@ -40,10 +47,13 @@ function groupToRow(g: Group, geo?: GeoResult | null) {
     placement_details: g.placementDetails,
     lat: geo ? geo.lat : (g.lat ?? null),
     lng: geo ? geo.lng : (g.lng ?? null),
+    assigned_to: g.assignedTo || null,
+    updated_by: audit.actorName,
+    ...(audit.isNew ? { created_by: audit.actorName } : {}),
   };
 }
 
-function partyToRow(p: Party, geo?: GeoResult | null) {
+function partyToRow(p: Party, geo: GeoResult | null | undefined, audit: Audit) {
   return {
     id: p.id,
     party_name: p.partyName,
@@ -64,6 +74,9 @@ function partyToRow(p: Party, geo?: GeoResult | null) {
     notes: p.notes,
     lat: geo ? geo.lat : (p.lat ?? null),
     lng: geo ? geo.lng : (p.lng ?? null),
+    assigned_to: p.assignedTo || null,
+    updated_by: audit.actorName,
+    ...(audit.isNew ? { created_by: audit.actorName } : {}),
   };
 }
 
@@ -89,6 +102,13 @@ type ActionResult = {
   area?: string;
   lat?: number | null;
   lng?: number | null;
+  // Also populated by saveGroup/saveParty — the audit fields actually
+  // written (created_by only differs from what the caller already had on
+  // a brand-new record's first save), so the caller can patch its local
+  // copy the same way it already does for updatedAt/area/lat/lng.
+  createdAt?: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
 };
 
 // Named for what it actually checks: is there a valid signed-in session.
@@ -98,12 +118,12 @@ type ActionResult = {
 // of that, since actions are reachable regardless of what the UI shows.
 async function requireAuth() {
   const supabase = await getServerSupabase();
-  if (!supabase) return { supabase: null } as const; // seed mode: no-op
+  if (!supabase) return { supabase: null, userId: null } as const; // seed mode: no-op
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
-  return { supabase } as const;
+  return { supabase, userId: user.id } as const;
 }
 
 type ExistingGeoRow = { address: string; lat: number | null; lng: number | null; updated_at: string } | null;
@@ -155,7 +175,7 @@ async function recordGroupChange(
 ): Promise<void> {
   if (previousGroupId === newGroupId) return;
   try {
-    const assignedBy = await getViewerEmail();
+    const assignedBy = await getViewerDisplayName();
     const now = new Date().toISOString();
 
     if (previousGroupId) {
@@ -200,11 +220,12 @@ export async function saveGroup(group: Group): Promise<ActionResult> {
       ? await geocodeAddress(group.address)
       : null;
 
-  const row = groupToRow(group, geo);
+  const actorName = await getViewerDisplayName();
+  const row = groupToRow(group, geo, { actorName, isNew: existing === null });
   const { data, error } = await supabase
     .from("groups")
     .upsert(row)
-    .select("updated_at")
+    .select("updated_at, created_at, created_by, updated_by")
     .single();
   if (error) return { ok: false, error: error.message, persisted: true };
   return {
@@ -214,6 +235,9 @@ export async function saveGroup(group: Group): Promise<ActionResult> {
     area: row.area,
     lat: row.lat,
     lng: row.lng,
+    createdAt: data?.created_at,
+    createdBy: data?.created_by,
+    updatedBy: data?.updated_by,
   };
 }
 
@@ -233,11 +257,12 @@ export async function saveParty(party: Party): Promise<ActionResult> {
       ? await geocodeAddress(party.address)
       : null;
 
-  const row = partyToRow(party, geo);
+  const actorName = await getViewerDisplayName();
+  const row = partyToRow(party, geo, { actorName, isNew: existing === null });
   const { data, error } = await supabase
     .from("parties")
     .upsert(row)
-    .select("updated_at")
+    .select("updated_at, created_at, created_by, updated_by")
     .single();
   if (error) return { ok: false, error: error.message, persisted: true };
 
@@ -250,6 +275,9 @@ export async function saveParty(party: Party): Promise<ActionResult> {
     area: row.area,
     lat: row.lat,
     lng: row.lng,
+    createdAt: data?.created_at,
+    createdBy: data?.created_by,
+    updatedBy: data?.updated_by,
   };
 }
 
@@ -376,7 +404,7 @@ export async function deleteGroup(id: string): Promise<ActionResult> {
 export async function deleteParty(id: string): Promise<ActionResult> {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true, persisted: false };
-  const deletedBy = await getViewerEmail();
+  const deletedBy = await getViewerDisplayName();
   const deletedAt = new Date().toISOString();
 
   const { error } = await supabase
@@ -431,7 +459,7 @@ export async function deletePerson(id: string): Promise<ActionResult> {
 
   const { error } = await supabase
     .from("people")
-    .update({ deleted_at: new Date().toISOString(), deleted_by: await getViewerEmail() })
+    .update({ deleted_at: new Date().toISOString(), deleted_by: await getViewerDisplayName() })
     .eq("id", id);
   if (error) return { ok: false, error: error.message, persisted: true };
   return { ok: true, persisted: true };
@@ -476,7 +504,7 @@ export async function addContactLogEntry(
 ): Promise<{ ok: boolean; error?: string; entry?: ContactLogEntry }> {
   const { supabase } = await requireAuth();
   if (!supabase) return { ok: true };
-  const contactedBy = await getViewerEmail();
+  const contactedBy = await getViewerDisplayName();
   const { data, error } = await supabase
     .from("contact_log")
     .insert({ party_id: partyId, contacted_by: contactedBy, note })
@@ -518,6 +546,31 @@ export async function getPlacementHistory(partyId: string): Promise<PlacementHis
     .order("assigned_at", { ascending: false });
   if (error) throw new Error(`Couldn't load placement history: ${error.message}`);
   return (data ?? []).map(rowToPlacementHistoryEntry);
+}
+
+/** Lets a signed-in coordinator set their own display name — shown in the
+ * header and, going forward, in every outreach/placement-history/created-
+ * updated-by attribution (see getViewerDisplayName()). Relies entirely on
+ * the "update own profile" RLS policy (019_assignments_display_names.sql);
+ * no service-role bypass, so this can only ever touch the caller's own row. */
+export async function updateOwnDisplayName(
+  fullName: string,
+): Promise<{ ok: boolean; error?: string; fullName?: string }> {
+  const { supabase, userId } = await requireAuth();
+  if (!supabase) return { ok: true, fullName: fullName.trim() };
+  if (!userId) return { ok: false, error: "Unauthorized" };
+
+  const trimmed = fullName.trim();
+  if (!trimmed) return { ok: false, error: "Display name can't be blank." };
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ full_name: trimmed })
+    .eq("id", userId)
+    .select("full_name")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, fullName: data.full_name };
 }
 
 export async function signOut() {
