@@ -551,9 +551,9 @@ function ChurchMarker({ onClick }: { onClick: () => void }) {
   return (
     <AdvancedMarker position={CHURCH_POSITION} zIndex={30} title={CHURCH_NAME} onClick={onClick}>
       <HomeMark
-        width={44}
-        height={44}
-        style={{ boxShadow: "0 4px 14px rgba(8,141,249,.5), 0 0 0 3px #fff" }}
+        width={34}
+        height={34}
+        style={{ filter: "drop-shadow(0 3px 8px rgba(8,141,249,.5))" }}
       />
     </AdvancedMarker>
   );
