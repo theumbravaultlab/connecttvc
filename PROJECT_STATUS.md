@@ -1,6 +1,6 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-07-27 · commit `9fd7cdb` (pending: "Created On" column + confirmed default Name A→Z sort on both Directory lists — not yet committed)
+Last updated: 2026-08-03 · commit `e7160c9` (map polish round: legend, deselect-on-outside-click, show-people cycle, church marker, `020_reassign_distant_addresses.sql` — see "Map polish round" section below)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -487,12 +487,19 @@ supabase/
                                  created_by/updated_by (text snapshots) on both groups and parties.
                                  NOT CONFIRMED RUN. See "Coordinator identity, assignment,
                                  sort/filter, and audit trail" below.
+  020_reassign_distant_addresses.sql — reassigns any group/party more than ~45mi
+                                 (straight-line proxy for ~1.5hr drive) from the actual
+                                 church (2101 Justin Rd, Flower Mound) to Southlake/Coppell/
+                                 Flower Mound/Double Oak/Highland Village, resets lat/lng to
+                                 null so the app's existing auto-backfill re-geocodes them.
+                                 Data-cleanup script, not additive — safe to re-run but not
+                                 idempotent-by-design. NOT RUN. See "Map polish round" below.
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (superseded, don't run)  →  015_soft_delete.sql  →  016_placement_history.sql  →  017_bulk_sample_data_v2.sql (optional)  →  018_five_city_expansion.sql (optional, additive)  →  019_assignments_display_names.sql
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (superseded, don't run)  →  015_soft_delete.sql  →  016_placement_history.sql  →  017_bulk_sample_data_v2.sql (optional)  →  018_five_city_expansion.sql (optional, additive)  →  019_assignments_display_names.sql  →  020_reassign_distant_addresses.sql (optional cleanup, requires 017/018 already geocoded)
 ```
 
 **Current live/production status: schema.sql, seed.sql, 002, 003, 004,
@@ -522,6 +529,10 @@ filter, and the new "Record info" footer) is already live in this commit,
 so run this one promptly — those features will silently no-op or error
 against a real Supabase project until it's applied. See "Coordinator
 identity, assignment, sort/filter, and audit trail" below.
+`020_reassign_distant_addresses.sql` is **not yet run** — a data-cleanup
+script, not a schema change, so nothing in the app depends on it; run it
+whenever the far-flung sample-data addresses are worth tidying up. See
+"Map polish round" below for what it does and why 45mi was chosen.
 
 **This directly affects `009_couple_host_naming.sql`: its 320 `UPDATE ...
 WHERE id = 'gN'` statements target ids that only exist once 005 has been
@@ -1898,6 +1909,102 @@ the column. Confirmed both list pages' default sort state was already
 `sortField: "name"`, `sortDir: "asc"` from when sorting was first built —
 no change needed there, just confirmed as the explicit, intentional
 default per this request.
+
+## Map polish round: legend, deselect-on-outside-click, show-people cycle, church marker, address cleanup SQL
+
+Six-item batch from the project owner, delegated with "add these in the
+order deemed best." Clarifying questions were asked up front on the three
+genuinely ambiguous design calls (show-people scoping, SQL table scope, SQL
+distance-threshold approximation) rather than guessing; the project owner
+picked the recommended option on all three.
+
+1. **Day-exclusion "matched on" logic — already correct, no change made.**
+   The ask was: deactivating every day chip in "Matched on" should mean
+   "any day works," not "no day works." Code review of `Finder.tsx`'s
+   `filtered` (party-matched branch) found `if (activeDays.size > 0 &&
+   !activeDays.has(g.day)) return false;` — when every day chip is
+   deactivated, `activeDays.size` is 0, the whole clause short-circuits
+   false, and the day criterion drops out of the filter entirely (matches
+   any day). The `suggestions` scoring has the same guard. Verified this
+   was already the shipped behavior (clean `git status`, nothing
+   uncommitted) rather than assuming — flagging here so a future session
+   doesn't re-litigate it.
+2. **Life-stage color legend above the map.** New `LifeStageLegend()` in
+   `FinderMap.tsx` — a centered, pointer-events-none pill overlay pinned to
+   the top of the map (`absolute left-1/2 top-3 -translate-x-1/2`), one
+   swatch (from `lifeColors(stage).solid`) + name per `LIFE_STAGES` entry.
+   Deliberately excludes the Closed-group flat gray, since that's a status
+   color, not a life stage. `pointer-events-none` so clicks in the gaps
+   between legend pills still reach the map underneath (needed for #4).
+3. **"Show people" is now a 4-state cycle on one button, not a boolean.**
+   New `PeopleLayerMode` type (`"off" | "unassigned" | "assigned" |
+   "all"`) and `nextPeopleLayerMode()` helper in `src/lib/types.ts`.
+   `Finder.tsx`'s `peopleLayer` state replaces the old `showAllPeople`
+   boolean; the single map button cycles off → unassigned → assigned → all
+   → off on each click. Confirmed with the project owner: **global, not
+   scoped to a selected group** — `statusParties` now reads `party.group
+   === null` (unassigned) / `!== null` (assigned) / everyone (all) across
+   the whole dataset, regardless of what's selected on the map. This
+   replaces the old behavior where the toggle narrowed to just the
+   selected group's roster.
+4. **Clicking anything other than a group pin/card now deselects.** New
+   `onDeselect` prop threaded through `FinderMap.tsx`: wired to the
+   `<Map>` component's own `onClick` (background clicks — confirmed
+   `@vis.gl/react-google-maps`'s `MapEventProps` exposes this, and that
+   marker clicks don't bubble into it, so this doesn't fight with
+   `GroupPin`'s own `onSelect`), plus `PartyPin`, `StatusPartyPin`, and the
+   new `ChurchMarker` (#5) each gained an `onClick={onDeselect}`. On the
+   list side, the scroll container in `Finder.tsx` gained an `onClick`
+   that deselects unless the click lands inside `[data-card]` (added to
+   `GroupCard.tsx` and the inline `SuggestedGroupCard`) or an interactive
+   control (`button, a, input, select`) — checked via `closest()` rather
+   than a bare `target === currentTarget` check, so it correctly catches
+   clicks on padding/gaps regardless of DOM nesting, without swallowing
+   clicks on things like the "show N more groups" toggle.
+5. **Permanent "The Village Church" marker.** New `ChurchMarker` in
+   `FinderMap.tsx` at the org's actual real-world meeting address — 2101
+   Justin Rd, Flower Mound, TX 75028-3831 — geocoded directly via the
+   Google Geocoding API (same one the app itself uses, called once with
+   the project's own server key rather than guessed): `lat 33.0269509, lng
+   -97.042758`. Renders the same `HomeMark` house glyph used in the header,
+   scaled up to 44px with a white-ring drop shadow so it reads as a
+   landmark rather than another group pin. Always rendered (browse mode
+   and "Finding for" mode alike); deliberately excluded from `fitPoints` so
+   it's a fixed landmark that never pulls the auto-zoom toward it.
+6. **New `supabase/020_reassign_distant_addresses.sql`** — reassigns any
+   Group or Party whose address is unreasonably far from the church closer
+   to five towns near it (Southlake, Coppell, Flower Mound, Double Oak,
+   Highland Village), confirmed in scope with the project owner: **both**
+   `groups` and `parties`. Plain SQL can't call the Routes API for real
+   drive time, so "more than 1.5 hours" is approximated with straight-line
+   (haversine) distance from the church's coordinates — **45 miles**,
+   the project owner's confirmed choice among the options offered (a
+   deliberately conservative stand-in, since straight-line distance always
+   undershoots real DFW driving distance/time). Flagged rows get a freshly
+   generated address in one of the five towns (round-robin by id order,
+   reusing the same street-name pool `generate-city-expansion.mjs` already
+   uses) and have `lat`/`lng` reset to `null` — **not re-geocoded by the
+   SQL itself**, since Postgres can't call Google's Geocoding API; this
+   deliberately piggybacks on the app's existing auto-backfill
+   (`backfillGroupLocations`/`backfillPartyLocations`, already triggered
+   automatically on next Directory open) rather than building a new
+   mechanism. Reports exactly how many rows it reassigned via `RAISE
+   NOTICE` (using `GET DIAGNOSTICS ... row_count`, not a follow-up count
+   query, so the number is scoped to just this run and doesn't conflate
+   with any older, unrelated ungeocoded rows). Only rows that already have
+   coordinates are considered — a row with no location yet is already
+   surfaced separately by the Map's "missing a location" banner, out of
+   scope here. **Not yet run** — same "the project owner runs it, not this
+   assistant" convention as every prior migration/cleanup script in this
+   project.
+
+Verified: `tsc` and `eslint` both clean, full production build succeeds
+(`npm run build`), dev server loads with zero console/server errors and
+correctly redirects unauthenticated to `/login`. **Not click-tested live**
+— same standing constraint as every round in this project: this app
+requires a real Supabase sign-in, which this assistant can't perform.
+Committed as `e7160c9` and pushed straight to `master` per the project
+owner's standing push authorization.
 
 ## What's built and verified working
 
