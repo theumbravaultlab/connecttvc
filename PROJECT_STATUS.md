@@ -1,6 +1,6 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-08-03 · commit `e7160c9` (map polish round: legend, deselect-on-outside-click, show-people cycle, church marker, `020_reassign_distant_addresses.sql` — see "Map polish round" section below)
+Last updated: 2026-08-03 · commit `7e4af87` (map polish round + fixes: legend, deselect-on-outside-click, show-people cycle, church marker (position corrected), `020`/`021_reassign_distant_addresses*.sql` — see "Map polish round" section below; per-criterion match checklist on group cards is pending commit, see "Per-criterion match checklist" section below)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -2075,6 +2075,87 @@ actually looked at the live map:
   "never rewrite an already-run migration" convention; a ~3-4mi
   anchor-point error doesn't meaningfully change which rows clear a 45mi
   bar, so its already-reassigned rows don't need redoing.
+
+**Follow-up, same round: the reassignment scripts also don't self-
+geocode.** After running `020`, the project owner saw the Map's "missing a
+location" banner (50 groups) plus the SQL's own summary query (50
+groups/177 parties `rows_pending_regeocode`) and read that as an error.
+It isn't one — it's the intended handoff documented in both scripts'
+headers: the SQL can't call Google's Geocoding API, so it deliberately
+resets `lat`/`lng` to `null` and leaves the actual re-geocoding to the
+app's existing auto-backfill. The gap: that backfill only fires from
+`GroupsListPage.tsx`/`PartiesListPage.tsx`'s own mount effects — the Map
+page never triggers it. Clarified for the project owner: visit Directory →
+Home Groups, then Directory → Parties, once each, to kick off
+`backfillGroupLocations()`/`backfillPartyLocations()` in the background
+(177 parties in batches of 15 will take a minute or two), then check the
+Map again. No code change — this was a workflow/expectations gap, not a
+bug.
+
+## Per-criterion match checklist on group cards
+
+Follow-up to a screenshot of the existing "might work" suggestion chips
+(`✓ Families`, `✓ Age`, `✓ Childcare`, `✗ Double Oak`). The project owner
+wanted two things, confirmed via clarifying questions before building:
+this checklist shown on **every** match card, not just imperfect
+suggestions (so a full/strict match visibly confirms "everything looks
+good" too); and each chip's label upgraded to show the actual matched/
+mismatched **value**, not just the bare criterion name — e.g. a Friday
+match should read "Day: Friday" (green), and per the project owner's own
+example, a childcare mismatch should read "No Childcare" (grey) rather
+than a generic "Childcare" label with just the icon changing.
+
+**New `src/lib/matchChecklist.ts`** — `buildMatchChecklist(party, group)`,
+shared by both the strict list and the suggestions. Evaluates all 5
+matching dimensions **independent of the "matched on" chips' active/
+inactive toggle state** (a deliberate design choice, confirmed against the
+project owner's "always visible, confirm everything looks good" intent —
+this is a different, purely informational readout of the real facts, not
+tied to which criteria currently narrow the search):
+- **Day** — `Day: <group's day, spelled out>`, met if that day is in the
+  party's stated availability. Omitted entirely if the party has no days
+  on file (mirrors how the "matched on" chips already skip criteria the
+  party hasn't stated).
+- **City** — the group's own city name (bare, no "City:" prefix — kept
+  consistent with the existing suggestion-chip style, which the project
+  owner didn't ask to change), met on exact match. Now shows the group's
+  *actual* city on a mismatch instead of just repeating the party's
+  desired city (the old suggestion-chip behavor, which reused
+  `party.area` as the label even when it didn't match — genuinely less
+  informative, fixed here).
+- **Life stage** — same treatment as City: the group's own life stage
+  (bare label), same latent bug fixed (label now reflects the group's
+  actual value, not just the party's request, on a mismatch).
+- **Age** — `Age: <party's own age>` (the project owner's confirmed
+  choice among three options — party's age vs. the group's accepted range
+  vs. both) — same value shown either way, just green+check or grey+X.
+  Omitted if the party has no age on file.
+- **Childcare** — `Has Childcare` / `No Childcare` (not a "Field: Value"
+  template — deliberately different phrasing per the project owner's own
+  example, since "Childcare: No" reads worse than a direct statement).
+  Omitted if the party doesn't need childcare.
+
+**New shared `MatchChecklistRow` in `src/components/ui.tsx`** — the actual
+chip-row renderer (green `oklch(0.95 0.06 150)` bg + check icon for a
+match, `var(--divider)` bg + X icon + `var(--faint)` text for a mismatch),
+used by both `GroupCard.tsx` (new `checklist` prop, rendered unconditionally
+under the "Hosted by" line whenever a party is selected — not gated behind
+the card being expanded/selected, per "always visible") and the inline
+`SuggestedGroupCard` in `Finder.tsx` (replaced its old bespoke
+`metKeys`/`missedKeys` inline chip JSX with the same shared component).
+
+**Suggestion ranking/scoring is unchanged** — `Finder.tsx`'s `suggestions`
+useMemo still scores and sorts candidates using only the currently-*active*
+matched-on criteria (same as before this round), so which groups appear in
+"might still work" and in what order didn't change. Only the *display*
+per suggestion switched from the old active-criteria-only chip set to the
+new full 5-criterion `buildMatchChecklist()` output, for the same "show
+the complete picture" reasoning as the strict list.
+
+Verified: `tsc`/`eslint` clean, full production build succeeds, dev
+server loads with zero console/server errors. **Not yet click-tested
+live** — same standing constraint as every round in this project. Not yet
+committed as of this doc update — see the header line above.
 
 ## What's built and verified working
 

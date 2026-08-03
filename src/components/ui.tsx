@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { capacityFill, lifeColors, spotsBadge, statusColors } from "@/lib/colors";
+import type { MatchChecklistItem } from "@/lib/matchChecklist";
 import type { DayShort, GroupStatus, LifeStage, PartyStatus } from "@/lib/types";
 import { DAYS } from "@/lib/types";
+import { CheckIcon, XIcon } from "@/components/icons";
 
 export function LifeTag({ life }: { life: LifeStage }) {
   const c = lifeColors(life);
@@ -27,6 +29,34 @@ export function PartyTag({ partySize }: { partySize: number }) {
     >
       Party of {partySize}
     </span>
+  );
+}
+
+/** Row of chips confirming exactly what does/doesn't match between a
+ * selected party and one specific group — green check + the group's own
+ * value when it matches what the party needs, grey X + the same style of
+ * label when it doesn't (so a mismatch shows the real conflicting value,
+ * not just a generic "no match"). Shared between the strict match list
+ * and the "might still work" suggestions so both read the same way. */
+export function MatchChecklistRow({ items }: { items: MatchChecklistItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <span
+          key={item.key}
+          className="flex items-center gap-1 rounded-full px-2 py-[2px] text-[10.5px] font-bold"
+          style={
+            item.met
+              ? { background: "oklch(0.95 0.06 150)", color: "oklch(0.44 0.13 150)" }
+              : { background: "var(--divider)", color: "var(--faint)" }
+          }
+        >
+          {item.met ? <CheckIcon width={9} height={9} /> : <XIcon width={9} height={9} />}
+          {item.label}
+        </span>
+      ))}
+    </div>
   );
 }
 

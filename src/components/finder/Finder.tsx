@@ -19,7 +19,8 @@ import {
 } from "@/lib/types";
 import { ageMatchesRange } from "@/lib/ageRange";
 import { lifeColors } from "@/lib/colors";
-import { Avatar, PartyTag } from "@/components/ui";
+import { buildMatchChecklist, type MatchChecklistItem } from "@/lib/matchChecklist";
+import { Avatar, MatchChecklistRow, PartyTag } from "@/components/ui";
 import {
   CarIcon,
   CheckIcon,
@@ -214,8 +215,11 @@ export function Finder({
       .filter((g) => status === "All" || g.status === status)
       .map((g) => ({
         group: g,
-        metKeys: criteria.filter((c) => c.satisfies(g)).map((c) => c.key),
-        missedKeys: criteria.filter((c) => !c.satisfies(g)).map((c) => c.key),
+        // Full picture for display (all criteria, not just active ones —
+        // same checklist the strict list shows), kept separate from the
+        // score below which still only counts currently-active criteria,
+        // since that's what actually determines inclusion/ranking here.
+        checklist: buildMatchChecklist(party, g),
         score: criteria.filter((c) => c.satisfies(g)).length,
       }))
       .filter((s) => s.score > 0)
@@ -608,6 +612,7 @@ export function Finder({
                     greatFit={!!party && g.life === party.life}
                     matchName={partyMembers[0]?.name.split(" ")[0]}
                     travelTime={effectiveTravelTimes[g.id]}
+                    checklist={party ? buildMatchChecklist(party, g) : null}
                     onSelect={() => setSelectedId(g.id)}
                   />
                 ))}
@@ -639,8 +644,7 @@ export function Finder({
                       <SuggestedGroupCard
                         key={s.group.id}
                         group={s.group}
-                        metKeys={s.metKeys}
-                        missedKeys={s.missedKeys}
+                        checklist={s.checklist}
                         selected={s.group.id === selectedId}
                         travelTime={effectiveTravelTimes[s.group.id]}
                         onSelect={() => setSelectedId(s.group.id)}
@@ -1082,15 +1086,13 @@ function CityFilterPopover({
  * despite not being a full match. */
 function SuggestedGroupCard({
   group,
-  metKeys,
-  missedKeys,
+  checklist,
   selected,
   travelTime,
   onSelect,
 }: {
   group: Group;
-  metKeys: string[];
-  missedKeys: string[];
+  checklist: MatchChecklistItem[];
   selected: boolean;
   travelTime?: TravelTime;
   onSelect: () => void;
@@ -1140,23 +1142,8 @@ function SuggestedGroupCard({
               </span>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {metKeys.map((k) => (
-              <span
-                key={k}
-                className="flex items-center gap-1 rounded-full bg-[oklch(0.95_0.06_150)] px-2 py-[2px] text-[10.5px] font-bold text-[oklch(0.44_0.13_150)]"
-              >
-                <CheckIcon width={9} height={9} /> {k}
-              </span>
-            ))}
-            {missedKeys.map((k) => (
-              <span
-                key={k}
-                className="flex items-center gap-1 rounded-full bg-[var(--divider)] px-2 py-[2px] text-[10.5px] font-bold text-[var(--faint)]"
-              >
-                <XIcon width={9} height={9} /> {k}
-              </span>
-            ))}
+          <div className="mt-2">
+            <MatchChecklistRow items={checklist} />
           </div>
         </div>
       </div>

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import type { Group } from "@/lib/types";
 import { DAY_LONG } from "@/lib/types";
 import type { TravelTime } from "@/lib/routes";
+import type { MatchChecklistItem } from "@/lib/matchChecklist";
 import { lifeColors } from "@/lib/colors";
-import { LifeTag, SpotsPill } from "@/components/ui";
+import { LifeTag, MatchChecklistRow, SpotsPill } from "@/components/ui";
 import {
   CarIcon,
   CheckIcon,
@@ -78,10 +79,13 @@ export const GroupCard = forwardRef<
     greatFit: boolean;
     matchName?: string;
     travelTime?: TravelTime;
+    /** Per-criterion match/mismatch chips against the currently selected
+     * "Finding for" party — null in browse mode (no party selected). */
+    checklist?: MatchChecklistItem[] | null;
     onSelect: () => void;
   }
 >(function GroupCard(
-  { group, selected, greatFit, matchName, travelTime, onSelect },
+  { group, selected, greatFit, matchName, travelTime, checklist, onSelect },
   ref,
 ) {
   const router = useRouter();
@@ -159,6 +163,12 @@ export const GroupCard = forwardRef<
           <div className="mt-1 text-[12px] font-semibold text-[var(--faint)]">
             Hosted by {group.host}
           </div>
+
+          {checklist && checklist.length > 0 && (
+            <div className="mt-2">
+              <MatchChecklistRow items={checklist} />
+            </div>
+          )}
 
           {selected && (
             <div className="mt-3 flex flex-col gap-2.5 border-t border-[var(--divider-2)] pt-3">
