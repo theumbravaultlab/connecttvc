@@ -534,13 +534,22 @@ function StatusPartyPin({
 }
 
 // The actual physical church this org meets at — 2101 Justin Rd, Flower
-// Mound, TX 75028-3831, geocoded directly via the Google Geocoding API
-// (same one the app itself uses) rather than guessed, since this is a real
-// fixed landmark, not sample/generated data. Always rendered, on every view
-// (browse or "Finding for"), and deliberately not part of `fitPoints` — it's
-// a permanent orientation landmark, not something that should pull the
-// auto-zoom toward it.
-const CHURCH_POSITION: LatLng = { lat: 33.0269509, lng: -97.04275799999999 };
+// Mound, TX 75028-3831. Always rendered, on every view (browse or "Finding
+// for"), and deliberately not part of `fitPoints` — it's a permanent
+// orientation landmark, not something that should pull the auto-zoom
+// toward it.
+//
+// NOTE on where these coordinates actually came from: plain address-string
+// geocoding (`?address=2101 Justin Rd...`) returns "ROOFTOP" precision but
+// landed ~3-4 miles south of the real church, in a residential subdivision
+// off Cross Timbers Rd — Google's ROOFTOP label doesn't guarantee it found
+// the named business, just a high-confidence point for that address
+// range. Cross-checked against The Village Church's actual verified
+// listing (matches Yelp/Waze/Facebook — Google Place ID
+// ChIJb9yJVYUyTIYRfKyLSizCkR4) via a place_id geocode lookup instead,
+// which returns `types: ["church", "place_of_worship", ...]` confirming
+// it's the real POI, not just an address interpolation.
+const CHURCH_POSITION: LatLng = { lat: 33.0704973, lng: -97.0601721 };
 const CHURCH_NAME = "The Village Church";
 
 /** Large, permanent church-icon marker — the same house glyph as the

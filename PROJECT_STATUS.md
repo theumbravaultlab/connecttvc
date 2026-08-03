@@ -493,13 +493,20 @@ supabase/
                                  Flower Mound/Double Oak/Highland Village, resets lat/lng to
                                  null so the app's existing auto-backfill re-geocodes them.
                                  Data-cleanup script, not additive — safe to re-run but not
-                                 idempotent-by-design. NOT RUN. See "Map polish round" below.
+                                 idempotent-by-design. CONFIRMED RUN — but 45mi wasn't
+                                 aggressive enough (see 021 below).
+  021_reassign_distant_addresses_v2.sql — same script as 020, threshold lowered
+                                 45mi -> 25mi after the project owner reported the map
+                                 still showing too many groups clustered in south/
+                                 southwest Arlington, Grand Prairie, Duncanville, and
+                                 south Fort Worth post-020. Safe to run even though 020
+                                 already ran — see its own header. NOT RUN.
 ```
 
 ## Database migrations — must run in this order
 
 ```
-schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (superseded, don't run)  →  015_soft_delete.sql  →  016_placement_history.sql  →  017_bulk_sample_data_v2.sql (optional)  →  018_five_city_expansion.sql (optional, additive)  →  019_assignments_display_names.sql  →  020_reassign_distant_addresses.sql (optional cleanup, requires 017/018 already geocoded)
+schema.sql  →  seed.sql  →  002_lock_down.sql  →  003_person_geo_and_status.sql  →  004_group_placement_details.sql  →  005_sample_data_dfw.sql  →  006_group_status_and_area_defaults.sql  →  007_person_age.sql  →  008_backend_hardening.sql  →  009_couple_host_naming.sql  →  010_person_party_size.sql  →  011_contact_log.sql  →  012_person_party_name.sql  →  013_party_split.sql  →  014_bulk_sample_data.sql (superseded, don't run)  →  015_soft_delete.sql  →  016_placement_history.sql  →  017_bulk_sample_data_v2.sql (optional)  →  018_five_city_expansion.sql (optional, additive)  →  019_assignments_display_names.sql  →  020_reassign_distant_addresses.sql (confirmed run, superseded by 021)  →  021_reassign_distant_addresses_v2.sql (optional cleanup, requires 017/018 already geocoded)
 ```
 
 **Current live/production status: schema.sql, seed.sql, 002, 003, 004,
@@ -529,10 +536,14 @@ filter, and the new "Record info" footer) is already live in this commit,
 so run this one promptly — those features will silently no-op or error
 against a real Supabase project until it's applied. See "Coordinator
 identity, assignment, sort/filter, and audit trail" below.
-`020_reassign_distant_addresses.sql` is **not yet run** — a data-cleanup
-script, not a schema change, so nothing in the app depends on it; run it
-whenever the far-flung sample-data addresses are worth tidying up. See
-"Map polish round" below for what it does and why 45mi was chosen.
+`020_reassign_distant_addresses.sql` is **confirmed run** (2026-08-03) —
+but its 45mi threshold left a visible cluster in south/southwest Arlington,
+Grand Prairie, Duncanville, and south Fort Worth, so `021_reassign_distant_addresses_v2.sql`
+(same script, threshold lowered to 25mi) exists as a follow-up and is
+**not yet run**. Neither is a schema change, so nothing in the app depends
+on them; run 021 whenever the remaining far-flung sample-data addresses
+are worth tidying up further. See "Map polish round" below for what they
+do and why 45mi (then 25mi) was chosen.
 
 **This directly affects `009_couple_host_naming.sql`: its 320 `UPDATE ...
 WHERE id = 'gN'` statements target ids that only exist once 005 has been
@@ -1963,14 +1974,17 @@ picked the recommended option on all three.
    clicks on things like the "show N more groups" toggle.
 5. **Permanent "The Village Church" marker.** New `ChurchMarker` in
    `FinderMap.tsx` at the org's actual real-world meeting address — 2101
-   Justin Rd, Flower Mound, TX 75028-3831 — geocoded directly via the
-   Google Geocoding API (same one the app itself uses, called once with
-   the project's own server key rather than guessed): `lat 33.0269509, lng
-   -97.042758`. Renders the same `HomeMark` house glyph used in the header,
-   scaled up to 44px with a white-ring drop shadow so it reads as a
-   landmark rather than another group pin. Always rendered (browse mode
-   and "Finding for" mode alike); deliberately excluded from `fitPoints` so
-   it's a fixed landmark that never pulls the auto-zoom toward it.
+   Justin Rd, Flower Mound, TX 75028-3831. Renders the same `HomeMark`
+   house glyph used in the header, scaled up. Always rendered (browse mode
+   and "Finding for" mode alike); deliberately excluded from `fitPoints`
+   so it's a fixed landmark that never pulls the auto-zoom toward it.
+   **Coordinates were wrong in the initial version — see the corrected
+   value and full story in the follow-up below** (a plain address geocode
+   landed ~3-4mi off; the church marker now uses `lat 33.0704973, lng
+   -97.0601721`, verified against the church's actual Google Place
+   listing). Initial version also used 44px + a `boxShadow` ring; fixed in
+   a follow-up (see below) after the project
+   owner reported a visible white square around it.
 6. **New `supabase/020_reassign_distant_addresses.sql`** — reassigns any
    Group or Party whose address is unreasonably far from the church closer
    to five towns near it (Southlake, Coppell, Flower Mound, Double Oak,
@@ -2005,6 +2019,62 @@ correctly redirects unauthenticated to `/login`. **Not click-tested live**
 requires a real Supabase sign-in, which this assistant can't perform.
 Committed as `e7160c9` and pushed straight to `master` per the project
 owner's standing push authorization.
+
+**Follow-up, same round: church marker shape fix, and a second address-
+reassignment pass.** Two pieces of feedback after the project owner
+actually looked at the live map:
+
+- **Church marker had a visible white square around it.** The `boxShadow:
+  "... 0 0 0 3px #fff"` ring followed the SVG's rectangular *bounding box*,
+  not the icon's own rounded shape (the rounding is baked into the SVG's
+  `<rect rx="9">`, which `box-shadow` doesn't know about) — so it rendered
+  as a literal square box around the icon rather than hugging its rounded
+  corners. Switched to `filter: drop-shadow(...)` (follows the actual
+  alpha shape, same pattern `PartyPin`/`StatusPartyPin` already use) and
+  sized down 44px → 34px per the project owner's request. Pushed as
+  `7217c83`.
+- **"Too many home groups down south" — 020's 45mi threshold wasn't
+  aggressive enough.** The project owner had already run `020` and could
+  see the actual result: a cluster still sitting in south/southwest
+  Arlington, Grand Prairie, Duncanville, and south Fort Worth — all
+  roughly 25–35mi straight-line from the church, comfortably under 020's
+  45mi cutoff even though that drive is realistically well over 1.5 hours
+  in DFW traffic. Rather than edit the already-run `020` in place, wrote
+  `supabase/021_reassign_distant_addresses_v2.sql` — same script, same
+  target towns, threshold lowered to **25mi**. Confirmed with the project
+  owner that lowering the threshold (vs. explicitly listing southern city
+  names to sweep) was the preferred approach. **Not yet run.**
+- **Church marker was genuinely in the wrong spot — found and fixed.** The
+  project owner flagged "the village is not in the correct location on the
+  map." First investigation pass (re-running the forward geocode, then
+  reverse-geocoding the hardcoded coordinates back to an address) found
+  both confirming `location_type: "ROOFTOP"` and the same formatted
+  address, and was wrongly reported here as "verified correct" — that
+  conclusion was wrong, and the mistake is worth naming: matching the
+  *address string* isn't the same as matching the *actual named place*.
+  The project owner then sent a screenshot of exactly where the pin
+  rendered — a residential subdivision off Cross Timbers Rd, nowhere near
+  a church campus — which prompted a different check: web search turned up
+  The Village Church's actual verified listings (Yelp, Waze, Facebook, all
+  agree), with Google Place ID `ChIJb9yJVYUyTIYRfKyLSizCkR4`. A
+  `place_id`-based Geocoding API lookup (not an address-string lookup) for
+  that exact place ID returned `types: ["church", "place_of_worship",
+  "point_of_interest", ...]` and coordinates ~3-4 miles north of the
+  original ones. **Root cause**: plain address-string geocoding can return
+  `location_type: "ROOFTOP"` for a high-confidence point along that street
+  and address-number range without it actually being the named business's
+  own parcel — "ROOFTOP" is a precision tier, not a guarantee it found the
+  specific POI you meant. A `place_id` lookup (once you have the right
+  place ID from an independent source) is the more reliable check for a
+  known real-world landmark. Corrected in both `FinderMap.tsx`'s
+  `CHURCH_POSITION` (now `lat 33.0704973, lng -97.0601721`) and
+  `021_reassign_distant_addresses_v2.sql`'s `church_lat`/`church_lng`
+  (not yet run, so no bad data was written from the wrong anchor).
+  `020_reassign_distant_addresses.sql` (already run) still has the old,
+  slightly-off coordinates in its file — left as-is per this project's
+  "never rewrite an already-run migration" convention; a ~3-4mi
+  anchor-point error doesn't meaningfully change which rows clear a 45mi
+  bar, so its already-reassigned rows don't need redoing.
 
 ## What's built and verified working
 
