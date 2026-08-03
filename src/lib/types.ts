@@ -29,6 +29,16 @@ export type TimePref = "Mornings" | "Afternoons" | "Evenings" | "Flexible";
 export const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export type DayShort = (typeof DAYS)[number];
 
+/** The map's "Show people" layer — one button cycles through these in
+ * order, always starting back at "off". Global (not scoped to a selected
+ * group): "unassigned" / "assigned" read `Party.group` (null vs. set)
+ * across every party, regardless of what's selected on the map. */
+export const PEOPLE_LAYER_MODES = ["off", "unassigned", "assigned", "all"] as const;
+export type PeopleLayerMode = (typeof PEOPLE_LAYER_MODES)[number];
+export function nextPeopleLayerMode(mode: PeopleLayerMode): PeopleLayerMode {
+  return PEOPLE_LAYER_MODES[(PEOPLE_LAYER_MODES.indexOf(mode) + 1) % PEOPLE_LAYER_MODES.length];
+}
+
 // Area is no longer a fixed set — it's auto-derived from the city in each
 // record's geocoded address (see src/lib/geocode.ts), so Group.area /
 // Person.area are just plain strings now. The Finder's area filter builds

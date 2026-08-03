@@ -3,9 +3,17 @@
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { AdvancedMarker, ColorScheme, Map as GoogleMap, useMap } from "@vis.gl/react-google-maps";
-import { initialsOf, partyDisplayName, type Group, type Party, type Person } from "@/lib/types";
-import { groupPinColor, statusSolid } from "@/lib/colors";
-import { UsersIcon } from "@/components/icons";
+import {
+  initialsOf,
+  LIFE_STAGES,
+  partyDisplayName,
+  type Group,
+  type Party,
+  type PeopleLayerMode,
+  type Person,
+} from "@/lib/types";
+import { groupPinColor, lifeColors, statusSolid } from "@/lib/colors";
+import { HomeMark, UsersIcon } from "@/components/icons";
 import { useTheme } from "@/components/ThemeProvider";
 
 const BROWSER_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ?? "";
@@ -26,6 +34,13 @@ const DFW_BOUNDS: google.maps.LatLngBoundsLiteral = {
   west: -97.55,
 };
 const DFW_CENTER = { lat: 32.92, lng: -96.95 };
+
+const PEOPLE_LAYER_LABELS: Record<PeopleLayerMode, string> = {
+  off: "Show people",
+  unassigned: "Showing: Unassigned",
+  assigned: "Showing: Assigned",
+  all: "Showing: All",
+};
 
 type LocatedGroup = Group & { lat: number; lng: number };
 type LatLng = { lat: number; lng: number };
@@ -117,8 +132,9 @@ export function FinderMap({
   statusParties,
   selectedId,
   onSelect,
-  showAllPeople,
-  onToggleShowAllPeople,
+  onDeselect,
+  peopleLayer,
+  onCyclePeopleLayer,
   showPeopleAvailable,
 }: {
   groups: Group[];
@@ -128,15 +144,22 @@ export function FinderMap({
   /** Every person, used only to look up each rendered party's members (for
    * pin initials/tooltips) — never rendered as its own pin. */
   people: Person[];
-  /** Every party to render as a smaller, status-colored pin when
-   * `showAllPeople` is on — already scoped by the caller to either "the
-   * selected group's roster" or "everyone", and already excludes `party`
-   * so the two pin types never overlap for the same party. */
+  /** Every party to render as a smaller, status-colored pin for the
+   * current `peopleLayer` mode — already scoped by the caller (global, by
+   * assignment status) and already excludes `party` so the two pin types
+   * never overlap for the same party. */
   statusParties: Party[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  showAllPeople: boolean;
-  onToggleShowAllPeople: () => void;
+  /** Clears the selected group — fired by clicking anything on the map
+   * that isn't a group pin (the map background, a party/status pin, or the
+   * permanent church marker), so a group only stays selected while it's
+   * the thing actually being looked at. */
+  onDeselect: () => void;
+  peopleLayer: PeopleLayerMode;
+  /** Advances the single "Show people" button to its next mode: off ->
+   * unassigned -> assigned -> all -> off. */
+  onCyclePeopleLayer: () => void;
   /** Hide the toggle entirely when there's no one to show (e.g. no Parties
    * data at all), same guard the "Finding for" search already uses. */
   showPeopleAvailable: boolean;
@@ -209,8 +232,10 @@ export function FinderMap({
         disableDefaultUI={false}
         colorScheme={theme === "dark" ? ColorScheme.DARK : ColorScheme.LIGHT}
         className="h-full w-full"
+        onClick={onDeselect}
       >
         <FitToPoints points={fitPoints} active={!!party} />
+        <ChurchMarker onClick={onDeselect} />
         {pins.map((pin) => {
           if (pin.kind === "group") {
             return (
@@ -230,6 +255,7 @@ export function FinderMap({
                 position={{ lat: pin.lat, lng: pin.lng }}
                 party={pin.party}
                 members={membersByParty.get(pin.party.id) ?? []}
+                onClick={onDeselect}
               />
             );
           }
@@ -239,25 +265,29 @@ export function FinderMap({
               position={{ lat: pin.lat, lng: pin.lng }}
               party={pin.party}
               members={membersByParty.get(pin.party.id) ?? []}
+              onClick={onDeselect}
             />
           );
         })}
       </GoogleMap>
 
+      <LifeStageLegend />
+
       {showPeopleAvailable && (
         <button
           type="button"
-          onClick={onToggleShowAllPeople}
-          aria-pressed={showAllPeople}
+          onClick={onCyclePeopleLayer}
+          aria-pressed={peopleLayer !== "off"}
+          title="Cycles: off -> unassigned -> assigned -> all"
           className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold shadow-[0_2px_8px_rgba(22,50,79,.18)] backdrop-blur transition-colors"
           style={
-            showAllPeople
+            peopleLayer !== "off"
               ? { background: "var(--brand-blue)", color: "#fff" }
               : { background: "color-mix(in srgb, var(--surface) 92%, transparent)", color: "var(--muted)" }
           }
         >
           <UsersIcon width={14} height={14} />
-          {showAllPeople ? "Showing people" : "Show people"}
+          {PEOPLE_LAYER_LABELS[peopleLayer]}
         </button>
       )}
 
@@ -286,6 +316,25 @@ export function FinderMap({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Centered legend above the map, one swatch + name per life stage — the
+ * same 5 hues `groupPinColor()` uses for New/Open groups (a Closed group's
+ * flat gray isn't a life stage, so it's deliberately not listed here). */
+function LifeStageLegend() {
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-3 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-full bg-[var(--surface)]/95 px-3.5 py-1.5 shadow-[0_2px_8px_rgba(22,50,79,.18)] backdrop-blur">
+      {LIFE_STAGES.map((stage) => (
+        <span key={stage} className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)]">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{ background: lifeColors(stage).solid }}
+          />
+          {stage}
+        </span>
+      ))}
     </div>
   );
 }
@@ -384,11 +433,21 @@ function GroupPin({
  * the party's initials in the head. Still reads as distinct from a group
  * teardrop or a roster pin via its larger size, pulsing halo, and top
  * z-index, not via a fixed color anymore. */
-function PartyPin({ position, party, members }: { position: LatLng; party: Party; members: Person[] }) {
+function PartyPin({
+  position,
+  party,
+  members,
+  onClick,
+}: {
+  position: LatLng;
+  party: Party;
+  members: Person[];
+  onClick: () => void;
+}) {
   const color = statusSolid(party.status);
   const label = partyDisplayName(party, members);
   return (
-    <AdvancedMarker position={position} zIndex={40} title={label}>
+    <AdvancedMarker position={position} zIndex={40} title={label} onClick={onClick}>
       <div className="relative flex h-[52px] w-[46px] items-center justify-center">
         <span
           className="hw-pulse-ring"
@@ -428,11 +487,26 @@ function PartyPin({ position, party, members }: { position: LatLng; party: Party
  * PartyPin but smaller, colored by status instead of always blue, and with
  * lower z-index so it never competes with the "Finding for" pin or a
  * selected group pin. */
-function StatusPartyPin({ position, party, members }: { position: LatLng; party: Party; members: Person[] }) {
+function StatusPartyPin({
+  position,
+  party,
+  members,
+  onClick,
+}: {
+  position: LatLng;
+  party: Party;
+  members: Person[];
+  onClick: () => void;
+}) {
   const color = statusSolid(party.status);
   const label = partyDisplayName(party, members);
   return (
-    <AdvancedMarker position={position} zIndex={20} title={`${label} · ${party.status}`}>
+    <AdvancedMarker
+      position={position}
+      zIndex={20}
+      title={`${label} · ${party.status}`}
+      onClick={onClick}
+    >
       <div style={{ filter: "drop-shadow(0 2px 5px rgba(22,50,79,.32))" }}>
         <svg width="23" height="27" viewBox="0 0 32 38" fill="none">
           <path
@@ -455,6 +529,32 @@ function StatusPartyPin({ position, party, members }: { position: LatLng; party:
           </text>
         </svg>
       </div>
+    </AdvancedMarker>
+  );
+}
+
+// The actual physical church this org meets at — 2101 Justin Rd, Flower
+// Mound, TX 75028-3831, geocoded directly via the Google Geocoding API
+// (same one the app itself uses) rather than guessed, since this is a real
+// fixed landmark, not sample/generated data. Always rendered, on every view
+// (browse or "Finding for"), and deliberately not part of `fitPoints` — it's
+// a permanent orientation landmark, not something that should pull the
+// auto-zoom toward it.
+const CHURCH_POSITION: LatLng = { lat: 33.0269509, lng: -97.04275799999999 };
+const CHURCH_NAME = "The Village Church";
+
+/** Large, permanent church-icon marker — the same house glyph as the
+ * header's HomeMark, just bigger and non-interactive beyond a hover title
+ * and the standard "clicking anything but a group pin deselects" behavior
+ * every other non-group marker shares. */
+function ChurchMarker({ onClick }: { onClick: () => void }) {
+  return (
+    <AdvancedMarker position={CHURCH_POSITION} zIndex={30} title={CHURCH_NAME} onClick={onClick}>
+      <HomeMark
+        width={44}
+        height={44}
+        style={{ boxShadow: "0 4px 14px rgba(8,141,249,.5), 0 0 0 3px #fff" }}
+      />
     </AdvancedMarker>
   );
 }

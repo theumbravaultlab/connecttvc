@@ -7,12 +7,14 @@ import {
   GROUP_STATUSES,
   LIFE_STAGES,
   initialsOf,
+  nextPeopleLayerMode,
   partyDisplayName,
   partyMemberNames,
   type DayShort,
   type Group,
   type GroupStatus,
   type Party,
+  type PeopleLayerMode,
   type Person,
 } from "@/lib/types";
 import { ageMatchesRange } from "@/lib/ageRange";
@@ -76,8 +78,10 @@ export function Finder({
   // Off by default — keeps the map uncluttered until a coordinator actually
   // wants to see people on it. Persists across party/group selection
   // changes (unlike the "matched on" toggles below), since it's a general
-  // map display preference, not part of any one search.
-  const [showAllPeople, setShowAllPeople] = useState(false);
+  // map display preference, not part of any one search. Global rather than
+  // scoped to a selected group — selecting a group pin doesn't narrow this
+  // layer, it's purely a "placed vs. not placed" view of everyone.
+  const [peopleLayer, setPeopleLayer] = useState<PeopleLayerMode>("off");
   const findingForId = useId();
   const lifeId = useId();
   const statusId = useId();
@@ -322,15 +326,22 @@ export function Finder({
     setStatus("All");
   };
 
-  // Who shows up as a status-colored pin on the map when "Show people" is
-  // on: just the selected group's roster if one is selected, otherwise
-  // everyone. The "Finding for" party always keeps its own distinct pin
-  // (see FinderMap) so it's never duplicated into this set.
+  // Who shows up as a status-colored pin on the map for the current
+  // "Show people" layer mode — global, not scoped to a selected group (see
+  // the peopleLayer state comment above). The "Finding for" party always
+  // keeps its own distinct pin (see FinderMap) so it's never duplicated
+  // into this set.
   const statusParties = useMemo(() => {
-    if (!showAllPeople) return [];
-    const base = selectedId ? parties.filter((p) => p.group === selectedId) : parties;
+    const base =
+      peopleLayer === "off"
+        ? []
+        : peopleLayer === "unassigned"
+          ? parties.filter((p) => p.group === null)
+          : peopleLayer === "assigned"
+            ? parties.filter((p) => p.group !== null)
+            : parties;
     return party ? base.filter((p) => p.id !== party.id) : base;
-  }, [showAllPeople, selectedId, parties, party]);
+  }, [peopleLayer, parties, party]);
 
   // The map normally only shows strict-match pins — but if a coordinator
   // selects a suggested candidate (not part of the strict list), its pin
@@ -561,8 +572,22 @@ export function Finder({
             )}
           </div>
 
-          {/* list scroll */}
-          <div ref={listRef} className="hw-scroll min-h-0 flex-1 overflow-y-auto p-3.5">
+          {/* list scroll — clicking empty space here (padding, gaps between
+              cards, below the last card) deselects, same "anything but the
+              group itself" rule the map follows. Checked via closest() up
+              to this container rather than a plain e.target === e.currentTarget
+              check, so it fires regardless of DOM nesting (a bare "did this
+              click land inside a card?" test), while still letting genuine
+              controls in the list (the "show more" toggle, etc.) work as
+              normal clicks rather than being treated as "clicking away". */}
+          <div
+            ref={listRef}
+            onClick={(e) => {
+              const target = e.target as HTMLElement;
+              if (!target.closest("[data-card], button, a, input, select")) setSelectedId(null);
+            }}
+            className="hw-scroll min-h-0 flex-1 overflow-y-auto p-3.5"
+          >
             {displayGroups.length === 0 ? (
               <div className="mt-10 px-4 text-center text-[13px] font-semibold text-[var(--faint)]">
                 {party && suggestions.length > 0
@@ -639,8 +664,9 @@ export function Finder({
             statusParties={statusParties}
             selectedId={selectedId}
             onSelect={setSelectedId}
-            showAllPeople={showAllPeople}
-            onToggleShowAllPeople={() => setShowAllPeople((v) => !v)}
+            onDeselect={() => setSelectedId(null)}
+            peopleLayer={peopleLayer}
+            onCyclePeopleLayer={() => setPeopleLayer(nextPeopleLayerMode)}
             showPeopleAvailable={parties.length > 0}
           />
         </div>
@@ -1075,6 +1101,7 @@ function SuggestedGroupCard({
 
   return (
     <div
+      data-card
       onClick={onSelect}
       className="cursor-pointer overflow-hidden rounded-2xl transition-shadow"
       style={{

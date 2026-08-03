@@ -96,6 +96,7 @@ export const GroupCard = forwardRef<
   return (
     <div
       ref={ref}
+      data-card
       onClick={onSelect}
       className="cursor-pointer overflow-hidden rounded-2xl transition-shadow"
       style={{
