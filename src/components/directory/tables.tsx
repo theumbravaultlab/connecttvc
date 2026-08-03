@@ -62,6 +62,21 @@ function SortableHeader<F extends string>({
 
 export type GroupSortField = "name" | "day" | "area" | "life" | "status" | "spots" | "assignedTo" | "createdAt";
 
+const checkboxCellClass = "w-8 px-3 py-2.5";
+
+function RowCheckbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      onClick={(e) => e.stopPropagation()}
+      onChange={onChange}
+      aria-label="Select row"
+      className="h-4 w-4 cursor-pointer accent-[var(--brand-blue)]"
+    />
+  );
+}
+
 export function GroupTable({
   groups,
   profileNames,
@@ -69,6 +84,9 @@ export function GroupTable({
   sortDir,
   onSort,
   onSelect,
+  selectedIds,
+  onToggleOne,
+  onToggleAll,
 }: {
   groups: Group[];
   /** id -> display name, built once per list page from the shared
@@ -79,11 +97,23 @@ export function GroupTable({
   sortDir: SortDir;
   onSort: (field: GroupSortField) => void;
   onSelect: (id: string) => void;
+  /** Multi-select for bulk actions — omit `onToggleOne` entirely to hide
+   * the checkbox column (e.g. a future read-only usage of this table). */
+  selectedIds?: Set<string>;
+  onToggleOne?: (id: string) => void;
+  onToggleAll?: () => void;
 }) {
+  const selectable = !!onToggleOne;
+  const allSelected = selectable && groups.length > 0 && groups.every((g) => selectedIds?.has(g.id));
   return (
     <table className="w-full min-w-[860px] border-collapse">
       <thead className="sticky top-0 z-10 bg-[var(--surface)]">
         <tr className="border-b border-[var(--divider)]">
+          {selectable && (
+            <th className={checkboxCellClass}>
+              <RowCheckbox checked={allSelected} onChange={() => onToggleAll?.()} />
+            </th>
+          )}
           <SortableHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <SortableHeader field="day" label="Meeting Day" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <SortableHeader field="area" label="City" sortField={sortField} sortDir={sortDir} onSort={onSort} />
@@ -103,6 +133,11 @@ export function GroupTable({
               onClick={() => onSelect(g.id)}
               className="cursor-pointer border-b border-[var(--panel-4)] transition-colors hover:bg-[var(--panel-1)]"
             >
+              {selectable && (
+                <td className={checkboxCellClass}>
+                  <RowCheckbox checked={!!selectedIds?.has(g.id)} onChange={() => onToggleOne?.(g.id)} />
+                </td>
+              )}
               <td className={`${td} font-[family-name:var(--font-fredoka)] font-semibold`}>
                 {g.name}
               </td>
@@ -137,6 +172,9 @@ export function PartyTable({
   sortDir,
   onSort,
   onSelect,
+  selectedIds,
+  onToggleOne,
+  onToggleAll,
 }: {
   parties: Party[];
   people: Person[];
@@ -145,13 +183,26 @@ export function PartyTable({
   sortDir: SortDir;
   onSort: (field: PartySortField) => void;
   onSelect: (id: string) => void;
+  /** Multi-select for bulk actions — omit `onToggleOne` entirely to hide
+   * the checkbox column. Only the party row itself is selectable, never an
+   * individual member sub-row (bulk actions operate on parties). */
+  selectedIds?: Set<string>;
+  onToggleOne?: (id: string) => void;
+  onToggleAll?: () => void;
 }) {
   const router = useRouter();
+  const selectable = !!onToggleOne;
+  const allSelected = selectable && parties.length > 0 && parties.every((p) => selectedIds?.has(p.id));
 
   return (
     <table className="w-full min-w-[800px] border-collapse">
       <thead className="sticky top-0 z-10 bg-[var(--surface)]">
         <tr className="border-b border-[var(--divider)]">
+          {selectable && (
+            <th className={checkboxCellClass}>
+              <RowCheckbox checked={allSelected} onChange={() => onToggleAll?.()} />
+            </th>
+          )}
           <SortableHeader field="name" label="Name" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <SortableHeader field="area" label="Home City" sortField={sortField} sortDir={sortDir} onSort={onSort} />
           <SortableHeader field="life" label="Life Stage" sortField={sortField} sortDir={sortDir} onSort={onSort} />
@@ -170,6 +221,11 @@ export function PartyTable({
                 onClick={() => onSelect(pt.id)}
                 className="cursor-pointer border-b border-[var(--panel-4)] transition-colors hover:bg-[var(--panel-1)]"
               >
+                {selectable && (
+                  <td className={checkboxCellClass}>
+                    <RowCheckbox checked={!!selectedIds?.has(pt.id)} onChange={() => onToggleOne?.(pt.id)} />
+                  </td>
+                )}
                 <td className={td}>
                   <span className="flex items-center gap-2">
                     <Avatar initials={initialsOf(partyDisplayName(pt, members))} size={24} tone="muted" />
@@ -218,6 +274,7 @@ export function PartyTable({
                     onClick={() => onSelect(pt.id)}
                     className="cursor-pointer border-b border-[var(--panel-4)] bg-[var(--panel-1)] transition-colors hover:bg-[var(--panel-2)]"
                   >
+                    {selectable && <td className={checkboxCellClass} />}
                     <td className={`${td} pl-11`}>
                       <span className="flex items-center gap-2">
                         <Avatar initials={initialsOf(m.name)} size={18} tone="muted" />

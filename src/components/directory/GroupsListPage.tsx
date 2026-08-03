@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DAYS, GROUP_STATUSES, type DayShort, type Group, type GroupStatus } from "@/lib/types";
-import { backfillGroupLocations } from "@/app/actions";
+import { backfillGroupLocations, bulkAssignGroups, bulkUpdateGroupStatus } from "@/app/actions";
 import { PlusIcon } from "@/components/icons";
+import { BulkActionBar } from "./BulkActionBar";
 import { useDirectoryData } from "./DirectoryData";
 import { DirectoryNav } from "./DirectoryNav";
 import { ListFilterBar, type ExtraFilter } from "./ListFilterBar";
@@ -48,7 +49,7 @@ function compareGroups(a: Group, b: Group, field: GroupSortField, profileNames: 
 
 export function GroupsListPage() {
   const router = useRouter();
-  const { groups, setGroups, profiles } = useDirectoryData();
+  const { groups, setGroups, profiles, viewerId } = useDirectoryData();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<GroupStatus | "All">("All");
@@ -59,6 +60,8 @@ export function GroupsListPage() {
   const [sortField, setSortField] = useState<GroupSortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPending, setBulkPending] = useState(false);
 
   const onSort = (field: GroupSortField) => {
     if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -167,6 +170,37 @@ export function GroupsListPage() {
     router.push(`/directory/groups/${g.id}`);
   };
 
+  const toggleOne = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelectedIds((prev) =>
+      filtered.every((g) => prev.has(g.id)) ? new Set() : new Set(filtered.map((g) => g.id)),
+    );
+
+  const bulkSetStatus = async (status: GroupStatus) => {
+    const ids = [...selectedIds];
+    setBulkPending(true);
+    const result = await bulkUpdateGroupStatus(ids, status);
+    setBulkPending(false);
+    if (!result.ok) return;
+    setGroups((gs) => gs.map((g) => (selectedIds.has(g.id) ? { ...g, status } : g)));
+  };
+
+  const bulkAssign = async (assignedTo: string | null) => {
+    const ids = [...selectedIds];
+    setBulkPending(true);
+    const result = await bulkAssignGroups(ids, assignedTo);
+    setBulkPending(false);
+    if (!result.ok) return;
+    setGroups((gs) => gs.map((g) => (selectedIds.has(g.id) ? { ...g, assignedTo } : g)));
+  };
+
   const hasFilters =
     search.trim() !== "" ||
     statusFilter !== "All" ||
@@ -217,7 +251,25 @@ export function GroupsListPage() {
           setDayFilter("All");
           setAssignedToFilter("All");
         }}
+        assignedToMeActive={viewerId != null && assignedToFilter === viewerId}
+        onToggleAssignedToMe={
+          viewerId == null
+            ? undefined
+            : () => setAssignedToFilter((v) => (v === viewerId ? "All" : viewerId))
+        }
       />
+
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          statusOptions={GROUP_STATUSES}
+          onSetStatus={bulkSetStatus}
+          profiles={profiles}
+          onAssign={bulkAssign}
+          onClear={() => setSelectedIds(new Set())}
+          pending={bulkPending}
+        />
+      )}
 
       <div className="shrink-0 px-4 py-2 text-[12px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
         {filtered.length} of {groups.length} groups
@@ -234,6 +286,9 @@ export function GroupsListPage() {
             sortDir={sortDir}
             onSort={onSort}
             onSelect={(id) => router.push(`/directory/groups/${id}`)}
+            selectedIds={selectedIds}
+            onToggleOne={toggleOne}
+            onToggleAll={toggleAll}
           />
         )}
       </div>

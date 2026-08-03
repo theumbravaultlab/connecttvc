@@ -37,6 +37,8 @@ export function ListFilterBar<TStatus extends string>({
   extraFilters,
   hasFilters,
   onClear,
+  assignedToMeActive,
+  onToggleAssignedToMe,
 }: {
   search: string;
   onSearchChange: (v: string) => void;
@@ -56,6 +58,13 @@ export function ListFilterBar<TStatus extends string>({
   extraFilters?: ExtraFilter[];
   hasFilters: boolean;
   onClear: () => void;
+  /** One-click shortcut for the existing "Assigned to" filter — sets it to
+   * the signed-in coordinator's own id instead of making them find their
+   * own name in a dropdown that grows with the team. Omit
+   * `onToggleAssignedToMe` entirely (e.g. demo mode, no viewer id) to hide
+   * this control rather than show a chip that can't do anything. */
+  assignedToMeActive?: boolean;
+  onToggleAssignedToMe?: () => void;
 }) {
   const searchId = useId();
   const statusId = useId();
@@ -151,6 +160,23 @@ export function ListFilterBar<TStatus extends string>({
           </select>
         </div>
       ))}
+      {onToggleAssignedToMe && (
+        <div className="pb-[3px]">
+          <button
+            type="button"
+            onClick={onToggleAssignedToMe}
+            aria-pressed={!!assignedToMeActive}
+            className="rounded-full border px-3 py-[7px] text-[12px] font-bold transition-colors"
+            style={
+              assignedToMeActive
+                ? { background: "var(--brand-blue)", color: "#fff", borderColor: "var(--brand-blue)" }
+                : { background: "var(--panel-1)", color: "var(--muted)", borderColor: "var(--border)" }
+            }
+          >
+            Assigned to me
+          </button>
+        </div>
+      )}
       {hasFilters && (
         <button
           type="button"

@@ -5,7 +5,17 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getViewerDisplayName } from "@/lib/auth";
 import { geocodeAddress, type GeoResult } from "@/lib/geocode";
 import { getTravelTimes, type TravelTime } from "@/lib/routes";
-import type { ContactLogEntry, Group, Party, PlacementHistoryEntry, Person } from "@/lib/types";
+import { rowToParty, rowToPerson } from "@/lib/data";
+import type { ImportPartyRow } from "@/lib/importParties";
+import type {
+  ContactLogEntry,
+  Group,
+  GroupStatus,
+  Party,
+  PartyStatus,
+  PlacementHistoryEntry,
+  Person,
+} from "@/lib/types";
 
 type SupabaseClient = NonNullable<Awaited<ReturnType<typeof getServerSupabase>>>;
 
@@ -420,6 +430,194 @@ export async function deleteParty(id: string): Promise<ActionResult> {
   if (memberError) return { ok: false, error: memberError.message, persisted: true };
 
   return { ok: true, persisted: true };
+}
+
+/** Every soft-deleted party, plus its (also soft-deleted) members — the
+ * data behind the "Recently deleted" restore view. Fetched on-demand
+ * rather than loaded into the shared DirectoryData context at layout time
+ * like the live groups/parties/people, since this is a rarely-visited
+ * page and there's no reason to pay for it on every route. */
+export async function getDeletedParties(): Promise<
+  ActionResult & { parties: Party[]; people: Person[] }
+> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false, parties: [], people: [] };
+
+  const { data: partyRows, error: partyError } = await supabase
+    .from("parties")
+    .select("*")
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+  if (partyError) return { ok: false, error: partyError.message, persisted: true, parties: [], people: [] };
+
+  const parties = (partyRows ?? []).map(rowToParty);
+  if (parties.length === 0) return { ok: true, persisted: true, parties: [], people: [] };
+
+  const { data: peopleRows, error: peopleError } = await supabase
+    .from("people")
+    .select("*")
+    .in("party_id", parties.map((p) => p.id));
+  if (peopleError) return { ok: false, error: peopleError.message, persisted: true, parties, people: [] };
+
+  return { ok: true, persisted: true, parties, people: (peopleRows ?? []).map(rowToPerson) };
+}
+
+/** Undoes deleteParty() — clears deleted_at/deleted_by on the party and
+ * every linked person, symmetric with how deleteParty() cascaded the
+ * delete in the first place. Used by both the "Recently deleted" view and
+ * the delete-undo toast, so a misclick is recoverable either right after
+ * it happens or later from the trash. */
+export async function restoreParty(id: string): Promise<ActionResult> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false };
+
+  const { error } = await supabase
+    .from("parties")
+    .update({ deleted_at: null, deleted_by: null })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message, persisted: true };
+
+  const { error: memberError } = await supabase
+    .from("people")
+    .update({ deleted_at: null, deleted_by: null })
+    .eq("party_id", id);
+  if (memberError) return { ok: false, error: memberError.message, persisted: true };
+
+  return { ok: true, persisted: true };
+}
+
+// ---------- Bulk actions (Directory list multi-select) ----------
+//
+// Deliberately plain field updates — no geocoding, no conflict/staleness
+// check, no auto-transition side effects (e.g. the single-record capacity
+// -> auto-close or group-assignment -> auto-status rules in
+// GroupForm.tsx/PartyForm.tsx). A bulk status or assignment change is
+// already an explicit, deliberate override across every selected row;
+// re-running per-record business rules on top of it would fight the
+// coordinator's own intent rather than help it. Still stamps updated_by
+// on every touched row, same audit convention as every other write.
+
+export async function bulkUpdateGroupStatus(ids: string[], status: GroupStatus): Promise<ActionResult> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false };
+  const { error } = await supabase
+    .from("groups")
+    .update({ status, updated_by: await getViewerDisplayName() })
+    .in("id", ids);
+  if (error) return { ok: false, error: error.message, persisted: true };
+  return { ok: true, persisted: true };
+}
+
+export async function bulkAssignGroups(ids: string[], assignedTo: string | null): Promise<ActionResult> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false };
+  const { error } = await supabase
+    .from("groups")
+    .update({ assigned_to: assignedTo, updated_by: await getViewerDisplayName() })
+    .in("id", ids);
+  if (error) return { ok: false, error: error.message, persisted: true };
+  return { ok: true, persisted: true };
+}
+
+export async function bulkUpdatePartyStatus(ids: string[], status: PartyStatus): Promise<ActionResult> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false };
+  const { error } = await supabase
+    .from("parties")
+    .update({ status, updated_by: await getViewerDisplayName() })
+    .in("id", ids);
+  if (error) return { ok: false, error: error.message, persisted: true };
+  return { ok: true, persisted: true };
+}
+
+export async function bulkAssignParties(ids: string[], assignedTo: string | null): Promise<ActionResult> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false };
+  const { error } = await supabase
+    .from("parties")
+    .update({ assigned_to: assignedTo, updated_by: await getViewerDisplayName() })
+    .in("id", ids);
+  if (error) return { ok: false, error: error.message, persisted: true };
+  return { ok: true, persisted: true };
+}
+
+/** Bulk CSV import — one Party (of one member) per row. Address is stored
+ * as-is with `area`/`lat`/`lng` left blank/null on purpose: geocoding
+ * hundreds of rows synchronously in one request would be slow and
+ * expensive, so this deliberately piggybacks on the same auto-backfill
+ * mechanism the sample-data SQL migrations already rely on
+ * (backfillPartyLocations(), triggered automatically next time the
+ * Parties list is opened) rather than building a second geocoding path.
+ * Rows with no name at all are silently skipped (counted, not erronred) —
+ * a coordinator reviewing an import doesn't need every blank spreadsheet
+ * row treated as a failure. */
+export async function bulkImportParties(rows: ImportPartyRow[]): Promise<
+  ActionResult & { imported: number; skipped: number; parties: Party[]; people: Person[] }
+> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false, imported: 0, skipped: 0, parties: [], people: [] };
+
+  const valid = rows.filter((r) => r.name.trim());
+  const skipped = rows.length - valid.length;
+  if (valid.length === 0) return { ok: true, persisted: true, imported: 0, skipped, parties: [], people: [] };
+
+  const actorName = await getViewerDisplayName();
+
+  const { data: insertedParties, error: partyError } = await supabase
+    .from("parties")
+    .insert(
+      valid.map((r) => ({
+        party_name: r.partyName.trim(),
+        area: "",
+        address: r.address.trim(),
+        age: r.age,
+        days: r.days,
+        time_pref: r.timePref,
+        life: r.life,
+        interests: "",
+        childcare_needed: false,
+        accessibility: "—",
+        status: r.status,
+        group_id: null,
+        joined: "",
+        notes: r.notes.trim(),
+        created_by: actorName,
+        updated_by: actorName,
+      })),
+    )
+    .select("*");
+  if (partyError) {
+    return { ok: false, error: partyError.message, persisted: true, imported: 0, skipped, parties: [], people: [] };
+  }
+
+  const { data: insertedPeople, error: personError } = await supabase
+    .from("people")
+    .insert(
+      valid.map((r, i) => ({
+        party_id: insertedParties[i].id,
+        name: r.name.trim(),
+        email: r.email.trim(),
+        phone: r.phone.trim(),
+      })),
+    )
+    .select("*");
+  if (personError) {
+    // Parties are already committed at this point — roll them back rather
+    // than leaving orphaned parties-with-no-members behind (which
+    // deletePerson()'s "party needs at least one member" rule would
+    // otherwise make impossible to clean up through the UI).
+    await supabase.from("parties").delete().in("id", insertedParties.map((p) => p.id));
+    return { ok: false, error: personError.message, persisted: true, imported: 0, skipped, parties: [], people: [] };
+  }
+
+  return {
+    ok: true,
+    persisted: true,
+    imported: valid.length,
+    skipped,
+    parties: insertedParties.map(rowToParty),
+    people: insertedPeople.map(rowToPerson),
+  };
 }
 
 /** Removing a person is only ever "leave this party" — never "unlink and

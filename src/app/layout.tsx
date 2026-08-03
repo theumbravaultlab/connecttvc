@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fredoka, Nunito } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -20,6 +20,21 @@ export const metadata: Metadata = {
   title: "Connect TVC — Home Groups",
   description:
     "Find and manage home groups: coordinator map + directory for Connect TVC.",
+  // iOS Safari doesn't read the web manifest (manifest.ts) the way Android
+  // Chrome does — these are the iOS-specific equivalents so "Add to Home
+  // Screen" still gets a real title/icon/standalone launch there too.
+  appleWebApp: {
+    title: "Connect TVC",
+    statusBarStyle: "default",
+    capable: true,
+  },
+};
+
+// Brand blue regardless of light/dark theme — same "deliberately not
+// tokenized" call already made for this color everywhere else in the app
+// (see PROJECT_STATUS.md's Dark Mode section).
+export const viewport: Viewport = {
+  themeColor: "#088df9",
 };
 
 export default function RootLayout({

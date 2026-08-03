@@ -20,6 +20,10 @@ type DirectoryData = {
   profiles: Profile[];
   setProfiles: Dispatch<SetStateAction<Profile[]>>;
   persisted: boolean;
+  /** The signed-in coordinator's own profile id — null in demo mode. Used
+   * for "Assigned to me" filters, not access control (every leader still
+   * sees/edits everything). */
+  viewerId: string | null;
 };
 
 const Ctx = createContext<DirectoryData | null>(null);
@@ -33,6 +37,7 @@ export function DirectoryDataProvider({
   people: initialPeople,
   profiles: initialProfiles,
   persisted,
+  viewerId,
   children,
 }: {
   groups: Group[];
@@ -40,6 +45,7 @@ export function DirectoryDataProvider({
   people: Person[];
   profiles: Profile[];
   persisted: boolean;
+  viewerId: string | null;
   children: ReactNode;
 }) {
   const [groups, setGroups] = useState(initialGroups);
@@ -49,7 +55,18 @@ export function DirectoryDataProvider({
 
   return (
     <Ctx.Provider
-      value={{ groups, setGroups, parties, setParties, people, setPeople, profiles, setProfiles, persisted }}
+      value={{
+        groups,
+        setGroups,
+        parties,
+        setParties,
+        people,
+        setPeople,
+        profiles,
+        setProfiles,
+        persisted,
+        viewerId,
+      }}
     >
       {children}
     </Ctx.Provider>

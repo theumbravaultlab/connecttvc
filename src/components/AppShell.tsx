@@ -12,6 +12,7 @@ import { HomeMark, MoonIcon, SunIcon } from "@/components/icons";
 import { DirectoryDataProvider, useDirectoryData } from "@/components/directory/DirectoryData";
 import { EditDisplayNameModal } from "@/components/EditDisplayNameModal";
 import { useTheme } from "@/components/ThemeProvider";
+import { UndoToastProvider } from "@/components/UndoToast";
 
 const BROWSER_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ?? "";
 
@@ -57,7 +58,9 @@ export function AppShell({
       people={people}
       profiles={profiles}
       persisted={persisted}
+      viewerId={viewerId}
     >
+      <UndoToastProvider>
       <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--surface)] print:h-auto print:overflow-visible">
         {/* unified header — hidden when printing/exporting a PDF */}
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--divider)] px-4 py-2.5 sm:px-6 sm:py-3 print:hidden">
@@ -130,6 +133,7 @@ export function AppShell({
           <div className="flex min-h-0 flex-1 flex-col print:min-h-0 print:flex-none">{children}</div>
         </MapsScope>
       </div>
+      </UndoToastProvider>
     </DirectoryDataProvider>
   );
 }

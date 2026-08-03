@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Group, Party, PartyStatus } from "@/lib/types";
 import { deleteGroup, saveGroup, saveParty } from "@/app/actions";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useUndoToast } from "@/components/UndoToast";
 import { useDirectoryData } from "./DirectoryData";
 import { BackLink } from "./form-bits";
 import { GroupForm } from "./GroupForm";
@@ -21,6 +22,7 @@ const ACTIVELY_SEARCHING_LIKE: PartyStatus[] = ["New", "Actively Searching", "Wa
 export function GroupEditPage({ id }: { id: string }) {
   const router = useRouter();
   const { groups, parties, people, profiles, setGroups, setParties, persisted } = useDirectoryData();
+  const { showUndoToast } = useUndoToast();
   const group = groups.find((g) => g.id === id) ?? null;
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -134,17 +136,31 @@ export function GroupEditPage({ id }: { id: string }) {
     });
   };
 
+  // Deletion is deferred to the undo toast's onCommit — group deletes are
+  // hard deletes (no soft-delete/trash for groups, see actions.ts), so
+  // "Undo" only means something if the real DELETE hasn't fired yet.
+  // Optimistically removed from local state and navigated away
+  // immediately; if the coordinator clicks Undo within the window, the
+  // group is patched right back into shared state and nothing was ever
+  // sent to the server.
   const confirmDelete = () => {
-    startTransition(async () => {
-      const result = await deleteGroup(group.id);
-      if (!result.ok) {
-        setConfirmOpen(false);
-        setSaveState("error");
-        setSaveError(result.error ?? "Delete failed — try again.");
-        return;
-      }
-      setGroups((gs) => gs.filter((g) => g.id !== group.id));
-      router.push("/directory/groups");
+    setConfirmOpen(false);
+    setGroups((gs) => gs.filter((g) => g.id !== group.id));
+    router.push("/directory/groups");
+    showUndoToast({
+      message: `"${group.name}" deleted`,
+      onUndo: () => setGroups((gs) => [...gs, group]),
+      onCommit: () => {
+        startTransition(async () => {
+          const result = await deleteGroup(group.id);
+          if (!result.ok) {
+            // The optimistic removal already happened and the toast is
+            // long gone by the time this fires — putting the group back
+            // is the only way to surface a failed delete at all.
+            setGroups((gs) => [...gs, group]);
+          }
+        });
+      },
     });
   };
 

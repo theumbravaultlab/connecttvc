@@ -137,6 +137,11 @@ export interface Party {
   createdAt?: string;
   createdBy?: string | null;
   updatedBy?: string | null;
+  // Soft-delete (see 015_soft_delete.sql) — set together, both null while
+  // the party is live. Only ever populated by getDeletedParties(); every
+  // other read (getParties()) already filters these out entirely.
+  deletedAt?: string | null;
+  deletedBy?: string | null;
 }
 
 /** One individual, linked to the Party that holds their matching/placement

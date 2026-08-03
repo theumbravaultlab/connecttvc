@@ -1,6 +1,10 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-08-03 · commit `7e4af87` (map polish round + fixes: legend, deselect-on-outside-click, show-people cycle, church marker (position corrected), `020`/`021_reassign_distant_addresses*.sql` — see "Map polish round" section below; per-criterion match checklist on group cards is pending commit, see "Per-criterion match checklist" section below)
+Last updated: 2026-08-03 · commit `eaead70` + a pending UX-enhancement batch
+(PWA install support, bulk directory actions, CSV import, trash/restore,
+delete-undo toast, duplicate detection, self-service password reset,
+printable roster, "assigned to me" filter, capacity-mismatch nudge — see
+"UX enhancement batch" section below, not yet committed as of this update)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -2156,6 +2160,201 @@ Verified: `tsc`/`eslint` clean, full production build succeeds, dev
 server loads with zero console/server errors. **Not yet click-tested
 live** — same standing constraint as every round in this project. Not yet
 committed as of this doc update — see the header line above.
+
+## UX enhancement batch: PWA, bulk actions, CSV import, trash, undo, more
+
+The project owner asked for a list of UX/system improvement ideas "based
+on what you know about this system and its purpose," picked which ones to
+build (excluded a "needs follow-up" surfaced view and a browse-mode "near
+me" geolocation sort — both intentionally not built), asked for more
+detail on the PWA suggestion specifically, then asked for everything else
+implemented, in whatever order made sense. Built roughly small-and-
+contained first, working up to the two biggest pieces (bulk actions, CSV
+import) last:
+
+1. **"Assigned to me" quick filter.** `DirectoryData` context gained
+   `viewerId` (threaded from `(app)/layout.tsx` → `AppShell` → the
+   provider — previously only `AppShell` itself had it). `ListFilterBar`
+   gained an optional `assignedToMeActive`/`onToggleAssignedToMe` pair,
+   rendered as a pill next to the existing "Assigned to" dropdown on both
+   `GroupsListPage.tsx`/`PartiesListPage.tsx` — a one-click shortcut for
+   the same filter, rather than making a coordinator find their own name
+   in a dropdown that grows with the team. Hidden entirely in demo mode
+   (no `viewerId`).
+2. **PWA install support — installable only, deliberately no offline
+   caching/service worker.** New `src/app/manifest.ts` (Next's file-
+   convention route, auto-served at `/manifest.webmanifest`) plus
+   `src/app/apple-icon.png` (iOS's separate file-convention icon) and
+   `public/icons/icon-{192,512}.png` + `icon-maskable-{192,512}.png`
+   (Android/adaptive-icon variants) — all rasterized from the existing
+   `HomeMark` brand SVG via a one-off `sharp` script (not checked in;
+   `sharp` happens to already be present as a transitive dep of Next's own
+   image pipeline, not a new project dependency). `layout.tsx` gained a
+   `viewport` export (`themeColor: "#088df9"`, same "brand blue never
+   changes between themes" call already made everywhere else) and
+   `metadata.appleWebApp` for the iOS-specific standalone-launch title.
+   Deliberately no service worker: this app's whole value is live
+   Supabase data (group capacity, statuses), and caching any of that for
+   offline use risks a coordinator placing someone into a group that's
+   already full because they're looking at a stale snapshot.
+   **Real bug found and fixed during verification**: `proxy.ts`'s route
+   matcher gated `/manifest.webmanifest` behind login like every other
+   route — but browsers fetch the manifest *unauthenticated*, in the
+   background, to decide installability, so they were silently getting
+   the `/login` HTML instead of JSON. Added `manifest\\.webmanifest` to
+   the matcher's exclusion list (alongside the existing image-extension
+   exclusions). Confirmed live in the dev server: manifest now returns
+   valid JSON unauthenticated, both icon files load directly.
+3. **Capacity-mismatch nudge on `GroupForm.tsx`.** When the number of
+   parties actually assigned via the app (`roster.length`) differs from
+   the manually-entered `Members` field, a small amber hint appears under
+   that field ("N parties are placed here via the app, but Members is set
+   to M") with a one-click "Set to N" button — respects the same
+   auto-close-when-full rule the manual input already has. `Members`
+   itself stays manual by design (see the Domain Model Summary section
+   above on why) — this only nudges, never auto-overwrites.
+4. **New `src/lib/duplicates.ts` — non-blocking duplicate detection.**
+   `findDuplicates(candidate, parties, people)` ranks matches strongest-
+   first (exact email > exact phone > same name+city > name alone), never
+   blocks a save (two real people can share a common name). Wired into
+   `PartyForm.tsx`: a new party being created shows an amber warning
+   banner naming the possible existing match(es), each a link straight to
+   that record, so a coordinator can check before creating a duplicate.
+   Reused unchanged by the CSV importer (#10) for the same purpose.
+5. **Printable single-group roster.** New route
+   `/directory/groups/[id]/roster` (`GroupRosterPage.tsx`) rather than a
+   print-only section bolted onto `GroupForm.tsx` — that form has ~30
+   input fields that would all need individual `print:hidden` treatment,
+   versus one small self-contained page. Opens in a new tab from a "Print
+   roster" link next to the "Assigned parties" heading, so a coordinator
+   doesn't lose their place mid-edit. Same `window.print()` +
+   print-only-header idiom as the Reports PDF export; the print-CSS
+   ancestor overrides (`print:h-auto`/`print:overflow-visible` up the
+   `AppShell`/layout chain) were already generic from that earlier work,
+   so this page needed no new CSS.
+6. **"Recently deleted" restore view for Parties.** Soft-delete
+   (`015_soft_delete.sql`) has existed since an earlier round with *no*
+   UI ever built for it — recovery meant clearing `deleted_at` by hand in
+   the Supabase table editor. New `getDeletedParties()`/`restoreParty(id)`
+   actions in `actions.ts` (the row↔domain mappers `rowToParty`/
+   `rowToPerson` were promoted from private to `export` in `data.ts` for
+   reuse here) and a new `/directory/trash` page (`TrashPage.tsx`),
+   reachable via a small "Recently deleted" text link next to the
+   Groups/Parties tab pills (deliberately not a third equal-weight tab —
+   a rarely-visited recovery view, not part of normal browsing). `Party`
+   gained `deletedAt`/`deletedBy` fields (only ever populated by this one
+   read; every other party fetch already filters deleted rows out
+   entirely). Restoring patches the shared `DirectoryData` context
+   directly, same "instantly visible everywhere" convention as every
+   other write in this app. **Groups aren't soft-deleted** (unchanged,
+   documented decision from the original soft-delete round) so they don't
+   appear here.
+7. **Undo toast for delete actions.** New `src/components/UndoToast.tsx`
+   — a provider mounted once at the `AppShell` level (survives client-side
+   navigation the same way `DirectoryDataProvider` does), exposing
+   `useUndoToast().showUndoToast({ message, onCommit, onUndo })`. The two
+   entity types needed genuinely different treatment, not one shared
+   mechanism:
+   - **Parties** (`PartyEditPage.tsx`): `deleteParty()` already fires
+     immediately (it's a soft delete, safely recoverable via #6 or this
+     toast's Undo) — the toast's `onUndo` just calls `restoreParty()`.
+     Chosen deliberately over deferring the delete itself, since an
+     already-soft-deleted party survives even if the tab closes before
+     the undo window elapses; a deferred delete wouldn't.
+   - **Groups** (`GroupEditPage.tsx`): hard delete, no soft-delete/trash
+     safety net at all — so the actual `deleteGroup()` call is *deferred*
+     to the toast's `onCommit`, firing only after the undo window elapses
+     with no click. "Undo" here means the DELETE was never sent, not a
+     restore. Accepted, documented tradeoff: closing the tab within the
+     undo window means the group is never actually deleted at all — for a
+     delete action, under-deleting is the safe failure direction, so this
+     wasn't treated as worth a server-side "pending delete" mechanism.
+8. **Bulk actions on both Directory lists.** `GroupTable`/`PartyTable`
+   (`tables.tsx`) gained an optional checkbox column (row-level, plus a
+   header "select all" — omitted entirely when the caller doesn't pass
+   `onToggleOne`, so this stays backward-compatible for any future
+   read-only usage). New shared `BulkActionBar.tsx` (generic over the
+   status enum, same pattern `ListFilterBar` already uses) appears above
+   the table whenever 1+ rows are checked: a "Set status" select and an
+   "Assign to" select, each applying immediately on change (no separate
+   confirm step, consistent with every other status/assignment control in
+   this app) and resetting to its placeholder afterward. New
+   `bulkUpdateGroupStatus`/`bulkAssignGroups`/`bulkUpdatePartyStatus`/
+   `bulkAssignParties` actions — deliberately plain field updates (no
+   geocoding, no conflict/staleness check, no per-record auto-transition
+   side effects like the single-record capacity-triggers-Closed rule) — a
+   bulk override is already an explicit, deliberate action across every
+   selected row.
+9. **Self-service "forgot password."** New public routes
+   `/forgot-password` (calls Supabase's native
+   `resetPasswordForEmail()`) and `/reset-password` (calls
+   `updateUser({ password })`, relying on the Supabase browser client's
+   built-in behavior of detecting the reset token in the URL and
+   establishing a short-lived recovery session automatically on load).
+   `proxy.ts` gained an `isPublicAuthRoute` bypass for both — critically,
+   `/reset-password` must be reachable *without* an existing normal
+   session, since the recovery-session exchange happens client-side after
+   the page has already loaded; requiring `user` at the proxy layer would
+   have bounced the visitor to `/login` before that exchange ever had a
+   chance to run. Account creation stays fully admin-provisioned
+   (unchanged) — this only lets an *existing* user recover a forgotten
+   password themselves, it doesn't reopen self-signup. Login page gained
+   a "Forgot password?" link.
+10. **Bulk CSV import for Parties.** The single highest-priority item
+    from the original suggestions list — real data lives in Asana today
+    and the documented plan has always been a bulk import, not one-by-one
+    entry, and this didn't exist before now. New
+    `/directory/parties/import` (`ImportPartiesPage.tsx`), reachable via
+    an "Import CSV" link next to "New party":
+    - **Column mapping, not a fixed schema** — the exact Asana export
+      shape isn't known, so a coordinator maps each detected CSV column
+      to a target field via a per-column dropdown, pre-guessed by header
+      name (`guessField()` in the new `src/lib/importParties.ts`, matched
+      against an alias list — e.g. "e-mail"/"email address" both map to
+      Email). A preview table (first 20 rows) shows exactly what would be
+      imported under the current mapping, including a per-row "possible
+      duplicate" flag reusing `findDuplicates()` from #4.
+    - **New hand-rolled `src/lib/csv.ts`** (`parseCSV`) — a small RFC
+      4180-ish parser (quoted fields, embedded commas, `""`-escaped
+      quotes), not a new dependency, same "hand-build it" philosophy as
+      the PDF export.
+    - **Scope decision, stated plainly**: each CSV row becomes one Party
+      of exactly one linked Person — merging multiple rows into a
+      multi-person household isn't attempted, since there's no reliable
+      signal in an unknown source format for which rows belong together.
+    - **New `bulkImportParties()` action** — inserts parties then their
+      linked people in two batched calls (letting Postgres's
+      `gen_random_uuid()` default generate every id, same as every other
+      insert path in this app), rolling the parties back if the people
+      insert fails so no orphaned zero-member party is left behind.
+      **Addresses are stored as-is with `area`/`lat`/`lng` left blank/null
+      on purpose** — geocoding hundreds of rows synchronously in one
+      request would be slow/expensive, so this deliberately reuses the
+      exact same auto-backfill mechanism every prior bulk-sample SQL
+      migration already relies on (`backfillPartyLocations()`, triggered
+      automatically next time the Parties list is opened) instead of
+      building a second geocoding path.
+
+Verified: `tsc`/`eslint` clean, full production build succeeds (all new
+routes — `/directory/groups/[id]/roster`, `/directory/trash`,
+`/directory/parties/import`, `/forgot-password`, `/reset-password`,
+`/manifest.webmanifest`, `/apple-icon.png` — appear in the route list).
+Dev-server-checked further than the usual "loads with zero console
+errors" baseline this time, since several of these pieces (the manifest
+fix, the public auth routes, the trash/import pages) are checkable
+without a real coordinator login: confirmed `/forgot-password` and
+`/reset-password` render correctly unauthenticated with zero console
+errors, confirmed `/directory/trash` still correctly redirects
+unauthenticated visitors to `/login` (proving the new public-route
+bypass in `proxy.ts` didn't accidentally widen beyond the two intended
+routes), confirmed the login page shows the new "Forgot password?" link,
+and confirmed `/manifest.webmanifest` + both icon files load directly
+and return real content unauthenticated (this is what caught the proxy
+matcher bug above). **Not click-tested for anything requiring a real
+signed-in session** (bulk actions, CSV import, trash restore, delete-undo
+toasts, the capacity nudge, the duplicate-detection banner) — same
+standing constraint as every round in this project. Not yet committed as
+of this doc update.
 
 ## What's built and verified working
 

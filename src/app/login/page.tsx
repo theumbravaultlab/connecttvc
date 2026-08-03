@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { supabaseConfigured } from "@/lib/supabase/config";
 import { HomeMark } from "@/components/icons";
@@ -75,9 +76,17 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-[12px] font-bold text-[var(--faint)]">
-                Password
-              </label>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="block text-[12px] font-bold text-[var(--faint)]">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-[12px] font-bold text-[var(--brand-blue)] hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}

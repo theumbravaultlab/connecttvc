@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { Party, Person } from "@/lib/types";
-import { deleteParty, deletePerson, saveParty, savePerson } from "@/app/actions";
+import { partyDisplayName, type Party, type Person } from "@/lib/types";
+import { deleteParty, deletePerson, restoreParty, saveParty, savePerson } from "@/app/actions";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SearchIcon } from "@/components/icons";
+import { useUndoToast } from "@/components/UndoToast";
 import { useDirectoryData } from "./DirectoryData";
 import { BackLink } from "./form-bits";
 import { PartyForm } from "./PartyForm";
@@ -20,6 +21,7 @@ function validateParty(members: Person[]): string | null {
 export function PartyEditPage({ id }: { id: string }) {
   const router = useRouter();
   const { groups, parties, setParties, people, setPeople, profiles, persisted } = useDirectoryData();
+  const { showUndoToast } = useUndoToast();
   const party = parties.find((p) => p.id === id) ?? null;
   const members = people.filter((p) => p.partyId === id);
 
@@ -122,6 +124,11 @@ export function PartyEditPage({ id }: { id: string }) {
     });
   };
 
+  // Unlike GroupEditPage's deferred delete, this commits right away —
+  // deleteParty() is already a soft delete (015_soft_delete.sql), so the
+  // party is safely recoverable (via this toast's Undo, or later from
+  // Directory → Recently deleted) the instant it's clicked, with no window
+  // where a closed tab would mean nothing happened at all.
   const confirmDelete = () => {
     startTransition(async () => {
       const result = await deleteParty(party.id);
@@ -131,11 +138,21 @@ export function PartyEditPage({ id }: { id: string }) {
         setSaveError(result.error ?? "Delete failed — try again.");
         return;
       }
-      // The DB cascades this delete to every linked person + contact log
-      // entry — mirror that locally so the shared state stays consistent.
+      const deletedMembers = people.filter((p) => p.partyId === party.id);
       setParties((ps) => ps.filter((p) => p.id !== party.id));
       setPeople((ps) => ps.filter((p) => p.partyId !== party.id));
       router.push("/directory/parties");
+      showUndoToast({
+        message: `"${partyDisplayName(party, deletedMembers)}" deleted`,
+        onCommit: () => {},
+        onUndo: () => {
+          restoreParty(party.id).then((result) => {
+            if (!result.ok) return;
+            setParties((ps) => [...ps, party]);
+            setPeople((ps) => [...ps, ...deletedMembers]);
+          });
+        },
+      });
     });
   };
 

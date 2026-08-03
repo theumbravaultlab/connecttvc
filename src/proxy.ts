@@ -33,14 +33,25 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isLogin = path === "/login";
+  // /forgot-password is public like /login (an unauthenticated visitor
+  // requesting a reset email). /reset-password is the one route that must
+  // stay reachable *without* a normal session: the Supabase reset link
+  // establishes a short-lived recovery session client-side (via the URL's
+  // token/code, parsed by the browser SDK on load) — by the time this
+  // proxy runs server-side, that exchange hasn't happened yet, so
+  // requiring `user` here would redirect to /login before the page ever
+  // gets a chance to set the new password.
+  const isPublicAuthRoute = path === "/forgot-password" || path === "/reset-password";
 
   // Everything is behind auth. Unauthenticated -> /login.
-  if (!user && !isLogin) {
+  if (!user && !isLogin && !isPublicAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-  // Already signed in? Skip the login page.
+  // Already signed in? Skip the login page (but not /reset-password — a
+  // signed-in user can still legitimately land there to set a new password,
+  // and bouncing them away would break that flow entirely).
   if (user && isLogin) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
@@ -52,7 +63,11 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on everything except static assets and images.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Run on everything except static assets, images, and the PWA
+    // manifest — browsers fetch manifest.webmanifest unauthenticated in
+    // the background to decide installability, so gating it behind login
+    // silently broke that check (it received the /login HTML instead of
+    // JSON).
+    "/((?!_next/static|_next/image|favicon.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

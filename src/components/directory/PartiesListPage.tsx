@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { PARTY_STATUSES, partyDisplayName, type Party, type PartyStatus, type Person } from "@/lib/types";
-import { backfillPartyLocations } from "@/app/actions";
-import { PlusIcon } from "@/components/icons";
+import { backfillPartyLocations, bulkAssignParties, bulkUpdatePartyStatus } from "@/app/actions";
+import { PlusIcon, UploadIcon } from "@/components/icons";
+import { BulkActionBar } from "./BulkActionBar";
 import { useDirectoryData } from "./DirectoryData";
 import { DirectoryNav } from "./DirectoryNav";
 import { ListFilterBar, type ExtraFilter } from "./ListFilterBar";
@@ -55,7 +57,7 @@ function compareParties(
 
 export function PartiesListPage() {
   const router = useRouter();
-  const { parties, setParties, people, setPeople, profiles } = useDirectoryData();
+  const { parties, setParties, people, setPeople, profiles, viewerId } = useDirectoryData();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<PartyStatus | "All">("All");
@@ -65,6 +67,8 @@ export function PartiesListPage() {
   const [sortField, setSortField] = useState<PartySortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPending, setBulkPending] = useState(false);
 
   const onSort = (field: PartySortField) => {
     if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -191,6 +195,37 @@ export function PartiesListPage() {
     router.push(`/directory/parties/${party.id}`);
   };
 
+  const toggleOne = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelectedIds((prev) =>
+      filtered.every((p) => prev.has(p.id)) ? new Set() : new Set(filtered.map((p) => p.id)),
+    );
+
+  const bulkSetStatus = async (status: PartyStatus) => {
+    const ids = [...selectedIds];
+    setBulkPending(true);
+    const result = await bulkUpdatePartyStatus(ids, status);
+    setBulkPending(false);
+    if (!result.ok) return;
+    setParties((ps) => ps.map((p) => (selectedIds.has(p.id) ? { ...p, status } : p)));
+  };
+
+  const bulkAssign = async (assignedTo: string | null) => {
+    const ids = [...selectedIds];
+    setBulkPending(true);
+    const result = await bulkAssignParties(ids, assignedTo);
+    setBulkPending(false);
+    if (!result.ok) return;
+    setParties((ps) => ps.map((p) => (selectedIds.has(p.id) ? { ...p, assignedTo } : p)));
+  };
+
   const hasFilters =
     search.trim() !== "" ||
     statusFilter !== "All" ||
@@ -208,6 +243,13 @@ export function PartiesListPage() {
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--divider)] px-3 py-2.5 sm:px-[18px] sm:py-3">
         <DirectoryNav />
         <div className="flex items-center gap-2">
+          <Link
+            href="/directory/parties/import"
+            className="flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3.5 py-1.5 text-[13px] font-bold text-[var(--muted)] transition-colors hover:bg-[var(--panel-1)]"
+          >
+            <UploadIcon width={15} height={15} />
+            Import CSV
+          </Link>
           <button
             onClick={handleNew}
             className="flex items-center gap-1.5 rounded-full border border-[var(--brand-blue-light)] px-3.5 py-1.5 text-[13px] font-bold text-[var(--brand-blue)] transition-colors hover:bg-[var(--panel-2)]"
@@ -244,7 +286,25 @@ export function PartiesListPage() {
           setAreaFilter("All");
           setAssignedToFilter("All");
         }}
+        assignedToMeActive={viewerId != null && assignedToFilter === viewerId}
+        onToggleAssignedToMe={
+          viewerId == null
+            ? undefined
+            : () => setAssignedToFilter((v) => (v === viewerId ? "All" : viewerId))
+        }
       />
+
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          statusOptions={PARTY_STATUSES}
+          onSetStatus={bulkSetStatus}
+          profiles={profiles}
+          onAssign={bulkAssign}
+          onClear={() => setSelectedIds(new Set())}
+          pending={bulkPending}
+        />
+      )}
 
       <div className="shrink-0 px-4 py-2 text-[12px] font-extrabold uppercase tracking-wide text-[var(--faint)]">
         {filtered.length} of {parties.length} parties · {filteredPeopleCount} people
@@ -262,6 +322,9 @@ export function PartiesListPage() {
             sortDir={sortDir}
             onSort={onSort}
             onSelect={(id) => router.push(`/directory/parties/${id}`)}
+            selectedIds={selectedIds}
+            onToggleOne={toggleOne}
+            onToggleAll={toggleAll}
           />
         )}
       </div>

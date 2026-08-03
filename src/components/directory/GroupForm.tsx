@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   DAYS,
   GROUP_STATUSES,
@@ -247,6 +248,32 @@ export function GroupForm({
               );
             }}
           />
+          {/* Members stays manual by design (see the SectionHeading below
+           * — a group's real-world roster is bigger than just the parties
+           * placed through this app), but a coordinator who HAS been
+           * keeping it in sync probably wants to know when it's drifted
+           * from what the app itself has recorded. Purely a suggestion —
+           * one click fills the field, it still isn't saved until they
+           * hit Save themselves like every other edit here. */}
+          {roster.length > 0 && roster.length !== group.members && (
+            <p className="mt-1.5 text-[11.5px] font-semibold text-[var(--amber-fg)]">
+              {roster.length} {roster.length === 1 ? "party is" : "parties are"} placed here via
+              the app, but Members is set to {group.members}.{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  onPatch(
+                    group.capacity > 0 && roster.length === group.capacity
+                      ? { members: roster.length, status: "Closed" }
+                      : { members: roster.length },
+                  )
+                }
+                className="font-extrabold text-[var(--brand-blue)] hover:underline"
+              >
+                Set to {roster.length}
+              </button>
+            </p>
+          )}
         </Field>
         <Field full label="Childcare available" matching>
           <div className="flex items-center gap-2 pt-1">
@@ -272,7 +299,18 @@ export function GroupForm({
         </Field>
       </div>
 
-      <SectionHeading>Assigned parties ({roster.length})</SectionHeading>
+      <div className="flex items-center justify-between gap-2">
+        <SectionHeading>Assigned parties ({roster.length})</SectionHeading>
+        {roster.length > 0 && (
+          <Link
+            href={`/directory/groups/${group.id}/roster`}
+            target="_blank"
+            className="mb-2.5 text-[11.5px] font-bold text-[var(--brand-blue)] hover:underline"
+          >
+            Print roster
+          </Link>
+        )}
+      </div>
       <AddPartyToGroup
         groupId={group.id}
         parties={parties}

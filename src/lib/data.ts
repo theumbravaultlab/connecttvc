@@ -40,7 +40,7 @@ function rowToGroup(r: any): Group {
   };
 }
 
-function rowToParty(r: any): Party {
+export function rowToParty(r: any): Party {
   return {
     id: String(r.id),
     partyName: r.party_name ?? "",
@@ -64,10 +64,12 @@ function rowToParty(r: any): Party {
     createdAt: r.created_at,
     createdBy: r.created_by ?? null,
     updatedBy: r.updated_by ?? null,
+    deletedAt: r.deleted_at ?? null,
+    deletedBy: r.deleted_by ?? null,
   };
 }
 
-function rowToPerson(r: any): Person {
+export function rowToPerson(r: any): Person {
   return {
     id: String(r.id),
     partyId: String(r.party_id),

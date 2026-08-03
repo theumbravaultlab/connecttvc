@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   LIFE_STAGES,
   PARTY_STATUSES,
@@ -22,14 +23,16 @@ import {
   TextInput,
   Toggle,
 } from "@/components/ui";
-import { PlusIcon } from "@/components/icons";
+import { PlusIcon, AlertIcon } from "@/components/icons";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { findDuplicates, DUPLICATE_REASON_LABEL } from "@/lib/duplicates";
 import { AddressAutocomplete } from "./AddressAutocomplete";
 import { SectionHeading, Field } from "./form-bits";
 import { ContactLog } from "./ContactLog";
 import { PlacementHistory } from "./PlacementHistory";
 import { EntityPicker } from "./EntityPicker";
 import { AdminFooter } from "./AdminFooter";
+import { useDirectoryData } from "./DirectoryData";
 
 export function PartyForm({
   party,
@@ -50,8 +53,27 @@ export function PartyForm({
   onUpdateMember: (id: string, patch: Partial<Person>) => void;
   onRemoveMember: (id: string) => void;
 }) {
+  const router = useRouter();
   const groupName = groups.find((g) => g.id === party.group)?.name ?? "Unassigned";
   const [removeCandidate, setRemoveCandidate] = useState<Person | null>(null);
+
+  // Non-blocking duplicate check — never prevents a save (two different
+  // real people can share a common name), just flags it before a
+  // coordinator accidentally creates a second record for someone already
+  // in the system. Runs against every other party's own name AND every
+  // other person's name/email/phone, excluding this party's own rows.
+  const { parties: allParties, people: allPeople } = useDirectoryData();
+  const primaryMember = members[0];
+  const duplicates = findDuplicates(
+    {
+      name: party.partyName || primaryMember?.name || "",
+      email: primaryMember?.email,
+      phone: primaryMember?.phone,
+      area: party.area,
+    },
+    allParties.filter((p) => p.id !== party.id),
+    allPeople.filter((p) => p.partyId !== party.id),
+  );
 
   const toggleDay = (d: DayShort) =>
     onPatch({
@@ -130,6 +152,41 @@ export function PartyForm({
         <PlusIcon width={13} height={13} />
         Add member
       </button>
+
+      {duplicates.length > 0 && (
+        <div className="mt-3 rounded-xl border border-[var(--amber-border)] bg-[var(--amber-bg)] px-3.5 py-3">
+          <div className="flex items-start gap-2">
+            <AlertIcon width={15} height={15} className="mt-0.5 shrink-0 text-[var(--amber-fg)]" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] font-bold text-[var(--amber-fg)]">
+                Possible duplicate — double check before saving:
+              </p>
+              <div className="mt-1.5 flex flex-col gap-1">
+                {duplicates.map((d) => {
+                  const existingParty = allParties.find((p) => p.id === d.partyId);
+                  const existingMembers = allPeople.filter((p) => p.partyId === d.partyId);
+                  const label = existingParty
+                    ? partyDisplayName(existingParty, existingMembers)
+                    : d.personName ?? "Unknown";
+                  return (
+                    <button
+                      key={d.partyId}
+                      type="button"
+                      onClick={() => router.push(`/directory/parties/${d.partyId}`)}
+                      className="flex items-center gap-1.5 text-left text-[12.5px] font-semibold text-[var(--amber-fg)] hover:underline"
+                    >
+                      <span className="font-extrabold">{label}</span>
+                      <span className="text-[11px] font-semibold opacity-80">
+                        ({DUPLICATE_REASON_LABEL[d.reason]})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SectionHeading>Location &amp; availability</SectionHeading>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
