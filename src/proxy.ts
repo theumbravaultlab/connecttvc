@@ -64,10 +64,12 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Run on everything except static assets, images, and the PWA
-    // manifest — browsers fetch manifest.webmanifest unauthenticated in
-    // the background to decide installability, so gating it behind login
-    // silently broke that check (it received the /login HTML instead of
-    // JSON).
-    "/((?!_next/static|_next/image|favicon.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // manifest/service-worker — browsers fetch manifest.webmanifest and
+    // sw.js unauthenticated in the background (installability checks,
+    // service worker registration), so gating either behind login broke
+    // them silently: they got the /login HTML back instead of
+    // JSON/JavaScript, which register()/the manifest parser both just
+    // fail on quietly rather than erroring loudly.
+    "/((?!_next/static|_next/image|favicon.ico|manifest\\.webmanifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -1,10 +1,12 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-08-03 · commit `eaead70` + a pending UX-enhancement batch
+Last updated: 2026-08-03 · commit `9a67f94` + a pending service-worker fix
 (PWA install support, bulk directory actions, CSV import, trash/restore,
 delete-undo toast, duplicate detection, self-service password reset,
 printable roster, "assigned to me" filter, capacity-mismatch nudge — see
-"UX enhancement batch" section below, not yet committed as of this update)
+"UX enhancement batch" section below; the follow-up fixing the PWA's
+missing service worker, at the end of that same section, is not yet
+committed as of this update)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -2353,8 +2355,51 @@ and return real content unauthenticated (this is what caught the proxy
 matcher bug above). **Not click-tested for anything requiring a real
 signed-in session** (bulk actions, CSV import, trash restore, delete-undo
 toasts, the capacity nudge, the duplicate-detection banner) — same
-standing constraint as every round in this project. Not yet committed as
-of this doc update.
+standing constraint as every round in this project. Committed as
+`9a67f94` and pushed to `master`.
+
+**Follow-up, same round: the PWA still wasn't actually installable —
+missing service worker.** The project owner reported back that the PWA
+needed more work. Investigated rather than guessing: Chrome's manifest +
+HTTPS alone are enough for *manual* "Install app" from the browser menu,
+but the *automatic* install prompt (the `beforeinstallprompt` flow/mini-
+infobar) still requires an active service worker with a registered
+`fetch` handler — confirmed directly against Chrome's own DevRel blog
+(developer.chrome.com/blog/update-install-criteria) rather than relying
+on memory, since this exact requirement has changed over time and could
+easily be stale knowledge. This app never had a service worker at all.
+
+Added the smallest possible fix, preserving the original "installable
+only, no offline caching" decision:
+- **New `public/sw.js`** — registers `install`/`activate`/`fetch`
+  listeners but the `fetch` handler never calls `respondWith()`, so every
+  request still goes straight to the network exactly as if the file
+  didn't exist. Exists purely to satisfy the criteria check, not to cache
+  or serve anything.
+- **New `src/components/ServiceWorkerRegister.tsx`** — a tiny client
+  component (`useEffect` + feature-detection) mounted in the root layout,
+  registers `/sw.js` on load. A failed registration is swallowed
+  silently — installability is a nice-to-have, not something that should
+  ever be able to break the app itself.
+- **Same proxy-matcher bug, same fix, one more file**: `/sw.js` was
+  gated behind login for the identical reason `/manifest.webmanifest` was
+  earlier — the browser fetches it unauthenticated
+  (`navigator.serviceWorker.register()`), so it was silently getting the
+  `/login` HTML back instead of JavaScript. Added `sw\\.js` to the same
+  matcher exclusion.
+
+Verified live in the dev server (not just build/typecheck this time,
+since this is exactly the kind of thing that only shows up at runtime):
+`navigator.serviceWorker.getRegistrations()` confirms an active,
+activated registration scoped to the whole origin; a direct `fetch('/sw.js')`
+returns `200` with `content-type: application/javascript` (not an HTML
+redirect); confirmed `/directory/trash` still correctly bounces
+unauthenticated visitors to `/login`, so the matcher change didn't
+accidentally widen the auth gate beyond the two intended static files.
+`tsc`/`eslint` clean, full production build succeeds. **Not yet
+confirmed on a real phone** that the install prompt actually appears —
+that needs the project owner's own device, same standing constraint as
+every visual/interactive check in this project.
 
 ## What's built and verified working
 
