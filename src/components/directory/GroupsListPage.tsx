@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { DAYS, GROUP_STATUSES, type DayShort, type Group, type GroupStatus } from "@/lib/types";
 import { backfillGroupLocations, bulkAssignGroups, bulkUpdateGroupStatus } from "@/app/actions";
-import { PlusIcon } from "@/components/icons";
+import { PlusIcon, UploadIcon } from "@/components/icons";
 import { BulkActionBar } from "./BulkActionBar";
 import { useDirectoryData } from "./DirectoryData";
 import { DirectoryNav } from "./DirectoryNav";
@@ -60,6 +61,10 @@ export function GroupsListPage() {
   const [sortField, setSortField] = useState<GroupSortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  // Off by default — checkboxes and the bulk action bar only add value
+  // once a coordinator actually wants to act on several rows at once, and
+  // stay out of the way (and out of accidental-click range) otherwise.
+  const [bulkEditOn, setBulkEditOn] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
 
@@ -215,6 +220,31 @@ export function GroupsListPage() {
         <DirectoryNav />
         <div className="flex items-center gap-2">
           <button
+            type="button"
+            onClick={() =>
+              setBulkEditOn((v) => {
+                if (v) setSelectedIds(new Set());
+                return !v;
+              })
+            }
+            aria-pressed={bulkEditOn}
+            className="rounded-full border px-3.5 py-1.5 text-[13px] font-bold transition-colors"
+            style={
+              bulkEditOn
+                ? { background: "var(--brand-blue)", color: "#fff", borderColor: "var(--brand-blue)" }
+                : { background: "transparent", color: "var(--muted)", borderColor: "var(--border)" }
+            }
+          >
+            Bulk edit
+          </button>
+          <Link
+            href="/directory/groups/import"
+            className="flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3.5 py-1.5 text-[13px] font-bold text-[var(--muted)] transition-colors hover:bg-[var(--panel-1)]"
+          >
+            <UploadIcon width={15} height={15} />
+            Import CSV
+          </Link>
+          <button
             onClick={handleNew}
             className="flex items-center gap-1.5 rounded-full border border-[var(--brand-blue-light)] px-3.5 py-1.5 text-[13px] font-bold text-[var(--brand-blue)] transition-colors hover:bg-[var(--panel-2)]"
           >
@@ -259,7 +289,7 @@ export function GroupsListPage() {
         }
       />
 
-      {selectedIds.size > 0 && (
+      {bulkEditOn && selectedIds.size > 0 && (
         <BulkActionBar
           count={selectedIds.size}
           statusOptions={GROUP_STATUSES}
@@ -286,9 +316,9 @@ export function GroupsListPage() {
             sortDir={sortDir}
             onSort={onSort}
             onSelect={(id) => router.push(`/directory/groups/${id}`)}
-            selectedIds={selectedIds}
-            onToggleOne={toggleOne}
-            onToggleAll={toggleAll}
+            {...(bulkEditOn
+              ? { selectedIds, onToggleOne: toggleOne, onToggleAll: toggleAll }
+              : {})}
           />
         )}
       </div>

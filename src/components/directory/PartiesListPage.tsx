@@ -67,6 +67,8 @@ export function PartiesListPage() {
   const [sortField, setSortField] = useState<PartySortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  // Off by default — see the matching comment in GroupsListPage.tsx.
+  const [bulkEditOn, setBulkEditOn] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
 
@@ -243,6 +245,24 @@ export function PartiesListPage() {
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--divider)] px-3 py-2.5 sm:px-[18px] sm:py-3">
         <DirectoryNav />
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setBulkEditOn((v) => {
+                if (v) setSelectedIds(new Set());
+                return !v;
+              })
+            }
+            aria-pressed={bulkEditOn}
+            className="rounded-full border px-3.5 py-1.5 text-[13px] font-bold transition-colors"
+            style={
+              bulkEditOn
+                ? { background: "var(--brand-blue)", color: "#fff", borderColor: "var(--brand-blue)" }
+                : { background: "transparent", color: "var(--muted)", borderColor: "var(--border)" }
+            }
+          >
+            Bulk edit
+          </button>
           <Link
             href="/directory/parties/import"
             className="flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3.5 py-1.5 text-[13px] font-bold text-[var(--muted)] transition-colors hover:bg-[var(--panel-1)]"
@@ -294,7 +314,7 @@ export function PartiesListPage() {
         }
       />
 
-      {selectedIds.size > 0 && (
+      {bulkEditOn && selectedIds.size > 0 && (
         <BulkActionBar
           count={selectedIds.size}
           statusOptions={PARTY_STATUSES}
@@ -322,9 +342,9 @@ export function PartiesListPage() {
             sortDir={sortDir}
             onSort={onSort}
             onSelect={(id) => router.push(`/directory/parties/${id}`)}
-            selectedIds={selectedIds}
-            onToggleOne={toggleOne}
-            onToggleAll={toggleAll}
+            {...(bulkEditOn
+              ? { selectedIds, onToggleOne: toggleOne, onToggleAll: toggleAll }
+              : {})}
           />
         )}
       </div>

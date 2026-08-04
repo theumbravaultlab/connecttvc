@@ -7,7 +7,7 @@ import type { Group, Party, Person, Profile } from "./types";
 // ============================================================
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function rowToGroup(r: any): Group {
+export function rowToGroup(r: any): Group {
   return {
     id: String(r.id),
     name: r.name,

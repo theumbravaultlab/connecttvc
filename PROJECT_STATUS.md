@@ -1,12 +1,10 @@
 # Connect TVC — Project Status & Handoff
 
-Last updated: 2026-08-03 · commit `9a67f94` + a pending service-worker fix
-(PWA install support, bulk directory actions, CSV import, trash/restore,
-delete-undo toast, duplicate detection, self-service password reset,
-printable roster, "assigned to me" filter, capacity-mismatch nudge — see
-"UX enhancement batch" section below; the follow-up fixing the PWA's
-missing service worker, at the end of that same section, is not yet
-committed as of this update)
+Last updated: 2026-08-04 · commit `d95289d` + a pending batch (CSV import
+extended to Home Groups, downloadable priority-tagged CSV templates for
+both entities, and a default-off "Bulk edit" toggle on both Directory
+lists — see "CSV import for Groups + template downloads + bulk-edit
+toggle" section below, not yet committed as of this update)
 
 This document is written so a fresh conversation (human or AI) can pick up
 this project with zero prior context. If you're Claude reading this at the
@@ -2400,6 +2398,99 @@ accidentally widen the auth gate beyond the two intended static files.
 confirmed on a real phone** that the install prompt actually appears —
 that needs the project owner's own device, same standing constraint as
 every visual/interactive check in this project.
+
+## CSV import for Groups + template downloads + bulk-edit toggle
+
+Two-part follow-up request: extend the Party CSV importer to Home Groups
+too, with a downloadable priority-tagged template for both; and make the
+Directory lists' bulk-select checkboxes/action bar (previous round)
+default off with a toggle, rather than always visible.
+
+**Renamed the Party importer's exports to be Party-specific**
+(`ImportField` → `PartyImportField`, `IMPORT_FIELD_LABELS` →
+`PARTY_IMPORT_FIELD_LABELS`, `guessField` → `guessPartyField`,
+`buildImportRow` → `buildPartyImportRow`) before adding a parallel Group
+version, so the two don't read as interchangeable when they're not.
+
+**New `src/lib/csvTemplate.ts`** — shared by both importers:
+- `buildTemplateCsv(fields, exampleValues)` — generates a downloadable CSV
+  with the priority tag baked directly into each header cell (e.g. `"Name
+  (Required)"`, `"Email (Low Priority)"`) rather than a separate legend,
+  so the file is self-documenting on its own. Plus one example row,
+  clearly prefixed `"EXAMPLE — delete this row — "` in its first cell so
+  it can never be mistaken for real data.
+- `stripFieldSuffix()` — strips that same tag back off before column-
+  matching, so a coordinator can fill in the exact downloaded template and
+  re-upload it with columns still auto-mapping correctly. Wired into both
+  `guessPartyField()`/`guessGroupField()`.
+- `downloadCsv()` — plain Blob + object URL + a programmatic click, no new
+  dependency.
+- Sanity-checked the round-trip logic directly (a throwaway Node script,
+  not checked in): generated a template, confirmed `stripFieldSuffix()`
+  recovers the exact original labels, and confirmed the example row gets
+  filtered back out by the same prefix check the import pages use.
+
+**Priority tiers (high vs. low) are not arbitrary** — they mirror this
+app's own existing "Matching" field flags already shown in
+`GroupForm.tsx`/`PartyForm.tsx` (Meeting day, City, Life stage, Age
+range, Childcare available for Groups; Available days, Home city, Life
+stage, Age, Childcare needed for Parties) — those are what the Finder's
+matching engine actually reads. Name (structurally required to create
+the record), Address (derives City, and is what places a pin on the map
+at all — central to what this app does), and for Groups specifically
+Time and Capacity (a group with no meeting time or spots-tracking isn't
+really usable yet) round out the high-priority set. Contact info,
+leadership names, status, and free text are all low priority — useful,
+but the app functions without them on day one. Documented directly in
+`PARTY_FIELD_PRIORITY`/`GROUP_FIELD_PRIORITY`'s own comments so the
+reasoning doesn't need to be re-derived later.
+
+**New `src/lib/importGroups.ts` + `bulkImportGroups` action** — mirrors
+the Party importer's shape (19 importable fields vs. Party's 11, since
+Group has meeting logistics, leadership, and descriptive fields Party
+doesn't). Same "leave `area`/`lat`/`lng` blank/null, let the existing
+auto-backfill geocode it" pattern as `bulkImportParties`. Duplicate
+detection is deliberately simpler than the Party importer's multi-signal
+`findDuplicates()` — just an exact (normalized) name match against
+existing groups, done client-side in `ImportGroupsPage.tsx` against the
+already-loaded `groups` list, since a group's identity really is its
+name in a way a person's isn't.
+
+**New shared `src/components/directory/CsvImportShared.tsx`** —
+`FilePicker` (now with a "Download template" button alongside "Choose CSV
+file") and `PriorityBadge` (shown next to each mapped column in both
+importers' mapping UI). Extracted because these two pieces are genuinely
+identical between the Group and Party flows; the mapping/preview step
+itself stays as two separate components (`ImportPartiesPage.tsx` /
+`ImportGroupsPage.tsx`) rather than one generic one, matching this app's
+established convention of parallel-but-separate Group/Party UI throughout
+the Directory (GroupForm/PartyForm, GroupEditPage/PartyEditPage, etc.).
+
+**New route `/directory/groups/import`**, plus an "Import CSV" link on
+`GroupsListPage.tsx` next to "New group" (same placement as the existing
+Parties one).
+
+**Bulk-edit toggle, default off.** Both `GroupsListPage.tsx` and
+`PartiesListPage.tsx` gained a `bulkEditOn` boolean (starts `false`) and a
+"Bulk edit" pill button in the header. When off, `selectedIds`/
+`onToggleOne`/`onToggleAll` are omitted entirely from the
+`GroupTable`/`PartyTable` props (via a conditional spread) rather than
+passed-but-disabled — `tables.tsx` already treated `onToggleOne` as
+optional from the previous round (`const selectable = !!onToggleOne`), so
+this needed no changes there at all, just no longer always supplying it.
+Toggling off also clears any in-progress selection, so a stale selection
+can't linger invisibly and reappear confusingly next time it's turned
+back on.
+
+Verified: `tsc`/`eslint` clean, full production build succeeds (new
+`/directory/groups/import` route appears in the route list), dev server
+loads with zero console/server errors, confirmed `/directory/groups/import`
+still correctly redirects unauthenticated visitors to `/login`. **Not
+click-tested for the actual import/mapping/preview flow or the bulk-edit
+toggle itself** — same standing constraint as every round in this
+project; the template-generation *logic* specifically was verified
+directly via a throwaway script (see above) since that part doesn't need
+a browser or auth to exercise. Not yet committed as of this doc update.
 
 ## What's built and verified working
 

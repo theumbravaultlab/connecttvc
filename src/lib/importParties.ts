@@ -1,6 +1,8 @@
 import { DAYS, LIFE_STAGES, PARTY_STATUSES, type DayShort, type LifeStage, type PartyStatus, type TimePref } from "./types";
+import { stripFieldSuffix, type FieldPriority, type TemplateField } from "./csvTemplate";
+import { matchEnumValue } from "./importShared";
 
-export type ImportField =
+export type PartyImportField =
   | "name"
   | "partyName"
   | "email"
@@ -14,7 +16,7 @@ export type ImportField =
   | "notes"
   | "skip";
 
-export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
+export const PARTY_IMPORT_FIELD_LABELS: Record<PartyImportField, string> = {
   name: "Name (required)",
   partyName: "Party/household name",
   email: "Email",
@@ -29,7 +31,7 @@ export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
   skip: "— Don't import —",
 };
 
-const FIELD_ALIASES: Record<Exclude<ImportField, "skip">, string[]> = {
+const FIELD_ALIASES: Record<Exclude<PartyImportField, "skip">, string[]> = {
   name: ["name", "full name", "individual", "person", "member", "member name"],
   partyName: ["party name", "family name", "household", "family", "last name"],
   email: ["email", "e-mail", "email address"],
@@ -43,16 +45,76 @@ const FIELD_ALIASES: Record<Exclude<ImportField, "skip">, string[]> = {
   notes: ["notes", "note", "comments", "comment"],
 };
 
+/** High vs low priority mirrors this app's own existing "Matching" field
+ * flags in PartyForm.tsx (Available days, Home city, Life stage, Age,
+ * Childcare needed) — those are what the Finder actually matches on, plus
+ * Name (structurally required) and Address (needed for map placement,
+ * which is central to what this app does). Everything else — contact
+ * info, status, free text — is genuinely useful but the app functions
+ * fine without it on day one. */
+export const PARTY_FIELD_PRIORITY: Record<Exclude<PartyImportField, "skip">, FieldPriority> = {
+  name: "high",
+  address: "high",
+  days: "high",
+  life: "high",
+  age: "high",
+  partyName: "low",
+  email: "low",
+  phone: "low",
+  status: "low",
+  timePref: "low",
+  notes: "low",
+};
+
+export const PARTY_REQUIRED_FIELD: PartyImportField = "name";
+
+const EXAMPLE_VALUES: Record<Exclude<PartyImportField, "skip">, string> = {
+  name: "John Smith",
+  partyName: "The Smiths",
+  email: "john@example.com",
+  phone: "(555) 123-4567",
+  address: "123 Main St, Flower Mound, TX 75028",
+  age: "34",
+  life: "Families",
+  status: "New",
+  days: "Mon;Wed;Fri",
+  timePref: "Evenings",
+  notes: "New to the area",
+};
+
+/** Same field order as `partyTemplateFields()`, keyed rather than
+ * positional so the two can never drift out of alignment. */
+const FIELD_ORDER = (Object.keys(PARTY_IMPORT_FIELD_LABELS) as PartyImportField[]).filter(
+  (f): f is Exclude<PartyImportField, "skip"> => f !== "skip",
+);
+
 /** Best-guess field for a CSV column header, by exact (case/whitespace-
- * insensitive) match against a known alias list. Returns "skip" when
- * nothing matches — better to make the coordinator map an unrecognized
- * column explicitly than guess wrong and silently import garbage. */
-export function guessField(header: string): ImportField {
-  const normalized = header.trim().toLowerCase();
-  for (const [field, aliases] of Object.entries(FIELD_ALIASES) as [Exclude<ImportField, "skip">, string[]][]) {
+ * insensitive) match against a known alias list. Strips a downloaded
+ * template's own "(High Priority)"/"(Required)" tag first, so re-
+ * uploading a filled-in template still auto-maps correctly. Returns
+ * "skip" when nothing matches — better to make the coordinator map an
+ * unrecognized column explicitly than guess wrong and silently import
+ * garbage. */
+export function guessPartyField(header: string): PartyImportField {
+  const normalized = stripFieldSuffix(header).trim().toLowerCase();
+  for (const [field, aliases] of Object.entries(FIELD_ALIASES) as [Exclude<PartyImportField, "skip">, string[]][]) {
     if (aliases.includes(normalized)) return field;
   }
   return "skip";
+}
+
+/** Field list + priority, in template-download order. */
+export function partyTemplateFields(): TemplateField[] {
+  return FIELD_ORDER.map((f) => ({
+    label: PARTY_IMPORT_FIELD_LABELS[f].replace(/\s*\(required\)$/i, ""),
+    priority: PARTY_FIELD_PRIORITY[f],
+    required: f === PARTY_REQUIRED_FIELD,
+  }));
+}
+
+/** Example values in the same order as `partyTemplateFields()`. */
+export function partyTemplateExampleRow(): string[] {
+  return FIELD_ORDER.map((f) => EXAMPLE_VALUES[f]);
 }
 
 export interface ImportPartyRow {
@@ -67,16 +129,6 @@ export interface ImportPartyRow {
   days: DayShort[];
   timePref: TimePref;
   notes: string;
-}
-
-function matchLifeStage(value: string): LifeStage {
-  const normalized = value.trim().toLowerCase();
-  return LIFE_STAGES.find((l) => l.toLowerCase() === normalized) ?? "Everyone";
-}
-
-function matchStatus(value: string): PartyStatus {
-  const normalized = value.trim().toLowerCase();
-  return PARTY_STATUSES.find((s) => s.toLowerCase() === normalized) ?? "New";
 }
 
 function matchDays(value: string): DayShort[] {
@@ -94,8 +146,8 @@ function matchDays(value: string): DayShort[] {
  * unparseable age becomes null, an unrecognized life stage/status falls
  * back to a sane default ("Everyone"/"New"), same "don't block the whole
  * import over one messy cell" philosophy as everything else here. */
-export function buildImportRow(cells: string[], mapping: ImportField[]): ImportPartyRow {
-  const get = (field: ImportField): string => {
+export function buildPartyImportRow(cells: string[], mapping: PartyImportField[]): ImportPartyRow {
+  const get = (field: PartyImportField): string => {
     const idx = mapping.indexOf(field);
     return idx === -1 ? "" : (cells[idx] ?? "").trim();
   };
@@ -108,8 +160,8 @@ export function buildImportRow(cells: string[], mapping: ImportField[]): ImportP
     phone: get("phone"),
     address: get("address"),
     age,
-    life: get("life") ? matchLifeStage(get("life")) : "Everyone",
-    status: get("status") ? matchStatus(get("status")) : "New",
+    life: get("life") ? matchEnumValue(get("life"), LIFE_STAGES, "Everyone") : "Everyone",
+    status: get("status") ? matchEnumValue(get("status"), PARTY_STATUSES, "New") : "New",
     days: get("days") ? matchDays(get("days")) : [],
     timePref: "Flexible",
     notes: get("notes"),

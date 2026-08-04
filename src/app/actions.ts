@@ -5,8 +5,9 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getViewerDisplayName } from "@/lib/auth";
 import { geocodeAddress, type GeoResult } from "@/lib/geocode";
 import { getTravelTimes, type TravelTime } from "@/lib/routes";
-import { rowToParty, rowToPerson } from "@/lib/data";
+import { rowToGroup, rowToParty, rowToPerson } from "@/lib/data";
 import type { ImportPartyRow } from "@/lib/importParties";
+import type { ImportGroupRow } from "@/lib/importGroups";
 import type {
   ContactLogEntry,
   Group,
@@ -618,6 +619,58 @@ export async function bulkImportParties(rows: ImportPartyRow[]): Promise<
     parties: insertedParties.map(rowToParty),
     people: insertedPeople.map(rowToPerson),
   };
+}
+
+/** Bulk CSV import for Groups — same pattern and same reasoning as
+ * bulkImportParties() (see its own comment): `area`/`lat`/`lng` are left
+ * blank/null on purpose so the existing auto-backfill re-geocodes them in
+ * the background rather than this action doing hundreds of synchronous
+ * Geocoding API calls. Simpler than the party version — one table, no
+ * linked Person rows to insert alongside it. */
+export async function bulkImportGroups(rows: ImportGroupRow[]): Promise<
+  ActionResult & { imported: number; skipped: number; groups: Group[] }
+> {
+  const { supabase } = await requireAuth();
+  if (!supabase) return { ok: true, persisted: false, imported: 0, skipped: 0, groups: [] };
+
+  const valid = rows.filter((r) => r.name.trim());
+  const skipped = rows.length - valid.length;
+  if (valid.length === 0) return { ok: true, persisted: true, imported: 0, skipped, groups: [] };
+
+  const actorName = await getViewerDisplayName();
+
+  const { data: insertedGroups, error } = await supabase
+    .from("groups")
+    .insert(
+      valid.map((r) => ({
+        name: r.name.trim(),
+        day: r.day,
+        time: r.time.trim(),
+        area: "",
+        host: r.host.trim(),
+        mentor: r.mentor.trim() || "—",
+        life: r.life,
+        status: r.status,
+        format: r.format,
+        freq: r.freq,
+        capacity: r.capacity,
+        members: r.members,
+        childcare: r.childcare,
+        topic: r.topic.trim(),
+        age_range: r.ageRange.trim() || "All ages",
+        start_date: r.startDate.trim(),
+        contact_email: r.contactEmail.trim(),
+        address: r.address.trim(),
+        description: r.desc.trim(),
+        placement_details: r.placementDetails.trim(),
+        created_by: actorName,
+        updated_by: actorName,
+      })),
+    )
+    .select("*");
+  if (error) return { ok: false, error: error.message, persisted: true, imported: 0, skipped, groups: [] };
+
+  return { ok: true, persisted: true, imported: valid.length, skipped, groups: insertedGroups.map(rowToGroup) };
 }
 
 /** Removing a person is only ever "leave this party" — never "unlink and
